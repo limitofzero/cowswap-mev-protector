@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{asset::AssetMetaCheck, prelude::*, window::WindowResolution};
 
 use crate::game::GamePlugin;
 
@@ -8,7 +8,7 @@ pub fn run_app() {
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
                     title: "CoW MEV Defense".into(),
-                    resolution: (1280.0, 720.0).into(),
+                    resolution: WindowResolution::new(1280, 720),
                     // Bind to the <canvas id="bevy-canvas"> element in index.html
                     #[cfg(target_arch = "wasm32")]
                     canvas: Some("#bevy-canvas".to_owned()),
@@ -17,7 +17,11 @@ pub fn run_app() {
                     ..default()
                 }),
                 ..default()
-            }),
+            })
+            .set(AssetPlugin {
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            })
         )
         .insert_resource(ClearColor(Color::srgb(0.04, 0.04, 0.10)))
         .add_plugins(GamePlugin)

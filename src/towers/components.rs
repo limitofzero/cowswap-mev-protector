@@ -63,6 +63,13 @@ impl TowerType {
             TowerType::CommitRevealBeacon => "C-Reveal",
         }
     }
+
+    pub fn sprite_path(&self) -> Option<&'static str> {
+        match self {
+            TowerType::BatchAuctioneer => Some("cowswap_tower_batch.png"),
+            _ => None,
+        }
+    }
 }
 
 /// A placed defense tower.

@@ -37,7 +37,7 @@ pub fn tick_mev_immunity(
 ) {
     for (entity, mut immunity) in &mut query {
         immunity.duration.tick(time.delta());
-        if immunity.duration.finished() {
+        if immunity.duration.just_finished() {
             commands.entity(entity).remove::<MevImmunity>();
         }
     }

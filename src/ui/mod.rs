@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{ecs::relationship::RelatedSpawnerCommands, prelude::*};
 
 use crate::{game::GameState, resources::GameScore};
 
@@ -82,7 +82,7 @@ fn setup_hud(mut commands: Commands) {
         });
 }
 
-fn legend_entry(parent: &mut ChildBuilder, color: Color, label: &str) {
+fn legend_entry(parent: &mut RelatedSpawnerCommands<ChildOf>, color: Color, label: &str) {
     parent
         .spawn(Node {
             flex_direction: FlexDirection::Row,
@@ -126,13 +126,13 @@ fn update_hud(
     if !score.is_changed() {
         return;
     }
-    if let Ok(mut t) = settled_q.get_single_mut() {
+    if let Ok(mut t) = settled_q.single_mut() {
         t.0 = format!("Settled: {}", score.txs_settled);
     }
-    if let Ok(mut t) = protected_q.get_single_mut() {
+    if let Ok(mut t) = protected_q.single_mut() {
         t.0 = format!("Protected: {:.2} ETH", score.value_protected);
     }
-    if let Ok(mut t) = extracted_q.get_single_mut() {
+    if let Ok(mut t) = extracted_q.single_mut() {
         t.0 = format!("Extracted: {:.2} ETH", score.value_extracted);
     }
 }

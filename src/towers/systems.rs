@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d}};
 
 use crate::transactions::{Batched, ImmunitySource, MevImmunity, Transaction};
 
@@ -86,7 +86,13 @@ pub fn tint_shielded_transactions(
 }
 
 /// Spawn a starter set of towers for the demo scene.
-pub fn spawn_initial_towers(mut commands: Commands) {
+pub fn spawn_initial_towers(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
     let layout: &[(TowerType, Vec2)] = &[
         (TowerType::BatchAuctioneer, Vec2::new(-300.0, -100.0)),
         (TowerType::CoWMatcher, Vec2::new(0.0, 140.0)),
@@ -94,34 +100,51 @@ pub fn spawn_initial_towers(mut commands: Commands) {
         (TowerType::SlippageGuard, Vec2::new(-120.0, -150.0)),
     ];
 
+    let texture_layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 4, 1, None, None);
+    let layout_handle = layouts.add(texture_layout);
+
     for (tower_type, pos) in layout {
         let color = tower_type.color();
         let range = tower_type.range();
 
         // Range indicator (translucent disc approximated as a large square for now)
         commands.spawn((
-            Sprite {
+            Mesh2d(meshes.add(Circle::new(range))),
+            MeshMaterial2d(materials.add(ColorMaterial {
                 color: Color::srgba(
                     color.to_srgba().red,
                     color.to_srgba().green,
                     color.to_srgba().blue,
                     0.07,
                 ),
-                custom_size: Some(Vec2::splat(range * 2.0)),
+                alpha_mode: AlphaMode2d::Blend,
                 ..default()
-            },
+            })),
             Transform::from_xyz(pos.x, pos.y, 0.1),
             Name::new("TowerRange"),
         ));
 
-        // Tower body
-        commands.spawn((
+        let sprite = if let Some(image_path) = tower_type.sprite_path() {
+            let texture = asset_server.load(image_path);
+            
+            Sprite {
+                image: texture,
+                texture_atlas: Some(TextureAtlas { layout: layout_handle.clone(), index: 0 }),
+                custom_size: Some(Vec2::splat(32.0)),
+                ..default()
+            }
+        } else {
             Sprite {
                 color,
                 custom_size: Some(Vec2::splat(26.0)),
                 ..default()
-            },
-            Transform::from_xyz(pos.x, pos.y, 0.5),
+            }
+        };
+
+        // Tower body
+        commands.spawn((
+            sprite,
+            Transform::from_xyz(pos.x, pos.y, 10.0),
             Tower::new(tower_type.clone()),
             Name::new(format!("Tower::{}", tower_type.label())),
         ));
