@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CoW MEV Defense</title>
+  <!-- Tell trunk to build the lib target (has #[wasm_bindgen(start)]) -->
+  <link data-trunk rel="rust" data-target-name="cow_mev_defense" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #0a0a14;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    canvas#bevy-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bevy-canvas"></canvas>
+  <!-- Built with: trunk build --release -->
+  <!-- trunk.toml picks up the WASM bundle automatically -->
+</body>
+</html>

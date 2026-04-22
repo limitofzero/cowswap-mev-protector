@@ -1,0 +1,13 @@
+# Trunk (https://trunkrs.dev/) — WASM bundler/dev server
+# Install: cargo install trunk
+# Dev:     trunk serve
+# Release: trunk build --release
+
+[build]
+target = "index.html"
+dist = "dist"
+
+[serve]
+address = "127.0.0.1"
+port = 8080
+open = false

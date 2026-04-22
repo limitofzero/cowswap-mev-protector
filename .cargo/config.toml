@@ -1,0 +1,7 @@
+# Run WASM builds with:  cargo run --target wasm32-unknown-unknown
+# Or use trunk:           trunk serve
+[target.wasm32-unknown-unknown]
+runner = "wasm-server-runner"
+# getrandom 0.3 requires an explicit backend on wasm32-unknown-unknown.
+# "wasm_js" uses the browser's Web Crypto API (window.crypto.getRandomValues).
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
