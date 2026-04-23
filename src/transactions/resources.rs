@@ -1,6 +1,5 @@
-use bevy::prelude::*;
-
 use super::components::TokenType;
+use bevy::prelude::*;
 
 #[derive(Resource)]
 pub struct TxSpawner {
