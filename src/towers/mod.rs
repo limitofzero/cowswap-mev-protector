@@ -17,7 +17,11 @@ impl Plugin for TowerPlugin {
         )
         .add_systems(
             Update,
-            (systems::tick_towers, systems::tint_shielded_transactions)
+            (
+                systems::tick_towers,
+                systems::tint_shielded_transactions,
+                systems::animate_sprites,
+            )
                 .run_if(in_state(GameState::Playing)),
         );
     }

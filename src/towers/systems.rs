@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2
 
 use crate::transactions::{Batched, ImmunitySource, MevImmunity, Transaction};
 
-use super::components::{Tower, TowerType};
+use super::components::{AnimationTimer, Tower, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
@@ -73,6 +73,22 @@ pub fn tick_towers(
     }
 }
 
+/// Advance sprite animation frames for all animated entities.
+pub fn animate_sprites(
+    time: Res<Time>,
+    mut query: Query<(&mut AnimationTimer, &mut Sprite)>,
+) {
+    for (mut anim, mut sprite) in &mut query {
+        anim.timer.tick(time.delta());
+        if anim.timer.just_finished() {
+            if let Some(atlas) = &mut sprite.texture_atlas {
+                // Wrap index back to 0 after last frame
+                atlas.index = (atlas.index + 1) % anim.frames;
+            }
+        }
+    }
+}
+
 /// Tint shielded transactions bright cyan so players can see the immunity.
 pub fn tint_shielded_transactions(
     mut query: Query<(&mut Sprite, Option<&MevImmunity>), With<Transaction>>,
@@ -99,7 +115,7 @@ pub fn spawn_initial_towers(
         (TowerType::DarkPoolNode, Vec2::new(250.0, -130.0)),
     ];
 
-    let texture_layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 4, 1, None, None);
+    let texture_layout = TextureAtlasLayout::from_grid(UVec2::new(104, 128), 4, 1, None, None);
     let layout_handle = layouts.add(texture_layout);
 
     for (tower_type, pos) in layout {
@@ -129,7 +145,7 @@ pub fn spawn_initial_towers(
             Sprite {
                 image: texture,
                 texture_atlas: Some(TextureAtlas { layout: layout_handle.clone(), index: 0 }),
-                custom_size: Some(Vec2::splat(32.0)),
+                custom_size: Some(Vec2::new(104.0, 128.0)),
                 ..default()
             }
         } else {
@@ -141,11 +157,15 @@ pub fn spawn_initial_towers(
         };
 
         // Tower body
-        commands.spawn((
+        let mut entity = commands.spawn((
             sprite,
             Transform::from_xyz(pos.x, pos.y, 10.0),
             Tower::new(tower_type.clone()),
             Name::new(format!("Tower::{}", tower_type.label())),
         ));
+        // Only add animation if this tower has a spritesheet
+        if tower_type.sprite_path().is_some() {
+            entity.insert(AnimationTimer::new(3.0, 4));
+        }
     }
 }

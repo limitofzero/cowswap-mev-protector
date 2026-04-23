@@ -1,5 +1,21 @@
 use bevy::prelude::*;
 
+/// Cycles through spritesheet frames at a fixed interval.
+#[derive(Component)]
+pub struct AnimationTimer {
+    pub timer: Timer,
+    pub frames: usize,
+}
+
+impl AnimationTimer {
+    pub fn new(fps: f32, frames: usize) -> Self {
+        Self {
+            timer: Timer::from_seconds(1.0 / fps, TimerMode::Repeating),
+            frames,
+        }
+    }
+}
+
 /// All CoW-protocol-based defense tower types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TowerType {
@@ -66,10 +82,12 @@ impl TowerType {
 
     pub fn sprite_path(&self) -> Option<&'static str> {
         match self {
-            TowerType::BatchAuctioneer => Some("cowswap_tower_batch.png"),
-            TowerType::CoWMatcher => Some("cowswap_tower_cow.png"),
-            TowerType::DarkPoolNode => Some("cowswap_tower_dark.png"),
-            _ => None,
+            TowerType::BatchAuctioneer    => Some("tower_ba.png"),
+            TowerType::CoWMatcher         => Some("tower_cow.png"),
+            TowerType::Solver             => Some("tower_slv.png"),
+            TowerType::SlippageGuard      => Some("tower_sg.png"),
+            TowerType::DarkPoolNode       => Some("tower_dp.png"),
+            TowerType::CommitRevealBeacon => None,
         }
     }
 }
