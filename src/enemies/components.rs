@@ -29,6 +29,17 @@ impl EnemyType {
         }
     }
 
+    pub fn max_hp(&self) -> f32 {
+        match self {
+            EnemyType::Frontrunner => 60.0,
+            EnemyType::Backrunner => 100.0,
+            EnemyType::SandwichBot => 80.0,
+            EnemyType::GeneralizedFrontrunner => 120.0,
+            EnemyType::Liquidator => 90.0,
+            EnemyType::JitLp => 50.0,
+        }
+    }
+
     /// ETH extracted from target per second when in attack range.
     pub fn extract_rate(&self) -> f32 {
         match self {
@@ -68,11 +79,7 @@ impl EnemyType {
     }
 
     pub fn sprite_path(&self) -> Option<&'static str> {
-        match self {
-            EnemyType::Frontrunner => Some("cowswap_frontrunner.png"),
-            EnemyType::Backrunner => Some("cowswap_backrunner.png"),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -81,21 +88,43 @@ impl EnemyType {
 pub struct Enemy {
     pub enemy_type: EnemyType,
     pub speed: f32,
-    /// ETH extracted per second when attacking.
     pub extract_rate: f32,
     pub attack_range: f32,
-    /// Current attack target (a Transaction entity).
     pub target: Option<Entity>,
+    pub hp: f32,
+    pub max_hp: f32,
+    pub slow_timer: Option<Timer>,
 }
 
 impl Enemy {
     pub fn new(enemy_type: EnemyType) -> Self {
+        let hp = enemy_type.max_hp();
         Self {
             speed: enemy_type.move_speed(),
             extract_rate: enemy_type.extract_rate(),
             attack_range: enemy_type.attack_range(),
             target: None,
+            hp,
+            max_hp: hp,
+            slow_timer: None,
             enemy_type,
+        }
+    }
+
+    pub fn effective_speed(&self) -> f32 {
+        if self.slow_timer.is_some() { self.speed * 0.35 } else { self.speed }
+    }
+
+    pub fn apply_slow(&mut self, secs: f32) {
+        self.slow_timer = Some(Timer::from_seconds(secs, TimerMode::Once));
+    }
+
+    pub fn tick_slow(&mut self, delta: std::time::Duration) {
+        if let Some(timer) = &mut self.slow_timer {
+            timer.tick(delta);
+            if timer.just_finished() {
+                self.slow_timer = None;
+            }
         }
     }
 }

@@ -21,6 +21,8 @@ impl Plugin for EnemyPlugin {
                 systems::find_enemy_targets,
                 systems::enemy_movement,
                 systems::extract_value,
+                systems::tick_enemy_slow,
+                systems::check_enemy_deaths,
             )
                 .chain()
                 .run_if(in_state(GameState::Playing)),

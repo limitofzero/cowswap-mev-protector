@@ -1,13 +1,15 @@
 use bevy::{prelude::*, sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d}};
 
-use crate::transactions::{components::ImmunitySource, Transaction};
+use crate::{enemies::components::Enemy, transactions::{components::ImmunitySource, Transaction}};
 
-use super::components::{AnimationTimer, Tower, TowerType};
+use super::components::{AnimationTimer, Projectile, Tower, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
+    mut commands: Commands,
     mut tower_query: Query<(&mut Tower, &Transform)>,
     mut tx_query: Query<(&mut Transaction, &Transform)>,
+    mut enemy_query: Query<(Entity, &mut Enemy, &Transform)>,
     time: Res<Time>,
 ) {
     for (mut tower, tower_transform) in &mut tower_query {
@@ -18,24 +20,23 @@ pub fn tick_towers(
 
         let tower_pos = tower_transform.translation.truncate();
         let range = tower.range;
+        let tower_type = tower.tower_type.clone();
 
-        let in_range: Vec<usize> = tx_query
-            .iter()
-            .enumerate()
-            .filter(|(_, (_, tx_t))| tower_pos.distance(tx_t.translation.truncate()) <= range)
-            .map(|(i, _)| i)
-            .collect();
-
-        if in_range.is_empty() { continue; }
-
-        // Collect mutable refs by iterating again — safe since we don't hold borrows
-        match &tower.tower_type {
+        match tower_type {
             TowerType::CoWMatcher => {
+                let in_range: Vec<usize> = tx_query.iter().enumerate()
+                    .filter(|(_, (_, t))| tower_pos.distance(t.translation.truncate()) <= range)
+                    .map(|(i, _)| i).collect();
+                if in_range.is_empty() { continue; }
                 for (mut tx, _) in tx_query.iter_mut().take(2) {
                     tx.grant_immunity(6.0, ImmunitySource::CoWMatch);
                 }
             }
             TowerType::BatchAuctioneer => {
+                let in_range: Vec<usize> = tx_query.iter().enumerate()
+                    .filter(|(_, (_, t))| tower_pos.distance(t.translation.truncate()) <= range)
+                    .map(|(i, _)| i).collect();
+                if in_range.is_empty() { continue; }
                 let batch_size = in_range.len() as u32;
                 for (i, (mut tx, _)) in tx_query.iter_mut().enumerate() {
                     if in_range.contains(&i) {
@@ -57,12 +58,70 @@ pub fn tick_towers(
                     }
                 }
             }
-            _ => {}
+            TowerType::Solver => {
+                let target = enemy_query.iter()
+                    .filter(|(_, _, t)| tower_pos.distance(t.translation.truncate()) <= range)
+                    .min_by(|a, b| {
+                        tower_pos.distance(a.2.translation.truncate())
+                            .partial_cmp(&tower_pos.distance(b.2.translation.truncate()))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(e, _, _)| e);
+
+                if let Some(target_entity) = target {
+                    commands.spawn((
+                        Sprite {
+                            color: TowerType::Solver.color(),
+                            custom_size: Some(Vec2::splat(6.0)),
+                            ..default()
+                        },
+                        Transform::from_xyz(tower_pos.x, tower_pos.y, 5.0),
+                        Projectile { target: target_entity, speed: 280.0, damage: 30.0 },
+                        Name::new("Projectile"),
+                    ));
+                }
+            }
+            TowerType::SlippageGuard => {
+                for (_, mut enemy, enemy_t) in enemy_query.iter_mut() {
+                    if tower_pos.distance(enemy_t.translation.truncate()) <= range {
+                        enemy.apply_slow(3.0);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Move homing projectiles toward their targets; deal damage on contact.
+pub fn move_projectiles(
+    mut commands: Commands,
+    mut proj_query: Query<(Entity, &Projectile, &mut Transform)>,
+    mut enemy_query: Query<(&mut Enemy, &Transform), Without<Projectile>>,
+    time: Res<Time>,
+) {
+    for (proj_entity, proj, mut proj_t) in &mut proj_query {
+        let Ok((mut enemy, enemy_t)) = enemy_query.get_mut(proj.target) else {
+            commands.entity(proj_entity).despawn();
+            continue;
+        };
+
+        let target_pos = enemy_t.translation.truncate();
+        let proj_pos = proj_t.translation.truncate();
+        let dist = proj_pos.distance(target_pos);
+
+        if dist < 8.0 {
+            enemy.hp = (enemy.hp - proj.damage).max(0.0);
+            commands.entity(proj_entity).despawn();
+        } else {
+            let dir = (target_pos - proj_pos).normalize_or_zero();
+            proj_t.translation += (dir * proj.speed * time.delta_secs()).extend(0.0);
         }
     }
 }
 
 /// Advance sprite animation frames for all animated entities.
+/// Skips entities whose atlas index is currently outside the animation strip
+/// (i.e. a status frame has been applied and should not be overwritten).
 pub fn animate_sprites(
     time: Res<Time>,
     mut query: Query<(&mut AnimationTimer, &mut Sprite)>,
@@ -71,6 +130,10 @@ pub fn animate_sprites(
         anim.timer.tick(time.delta());
         if anim.timer.just_finished() {
             if let Some(atlas) = &mut sprite.texture_atlas {
+                // Don't animate over a status frame that lives beyond our strip.
+                if atlas.index >= anim.base + anim.frames {
+                    continue;
+                }
                 let local = atlas.index.saturating_sub(anim.base);
                 atlas.index = anim.base + (local + 1) % anim.frames;
             }

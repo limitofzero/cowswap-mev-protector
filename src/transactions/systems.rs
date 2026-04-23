@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{mempool::MempoolPath, resources::{GameEconomy, GameScore}, towers::AnimationTimer};
+use crate::{enemies::components::Enemy, mempool::MempoolPath, resources::{GameEconomy, GameScore}, towers::AnimationTimer};
 
 use super::{
     components::Transaction,
@@ -79,6 +79,44 @@ fn format_label(amount: f32, symbol: &str) -> String {
         format!("{:.2} {}", amount, symbol)
     } else {
         format!("{:.4} {}", amount, symbol)
+    }
+}
+
+/// Update each transaction's sprite to reflect its current status.
+///
+/// Frame mapping (frames 4-7 are status overlays):
+///   4 = safe/idle  (unused here — covered by the 0-3 animation loop)
+///   5 = at risk    (targeted by an enemy, but not yet immune or extracted)
+///   6 = immune     (protected by a tower)
+///   7 = extracted  (enemy is actively draining value)
+pub fn update_tx_sprites(
+    mut tx_query: Query<(Entity, &Transaction, &mut Sprite)>,
+    enemy_query: Query<&Enemy>,
+) {
+    let targeted: std::collections::HashSet<Entity> = enemy_query
+        .iter()
+        .filter_map(|e| e.target)
+        .collect();
+
+    for (entity, tx, mut sprite) in &mut tx_query {
+        let Some(atlas) = &mut sprite.texture_atlas else { continue };
+
+        let status_frame = if targeted.contains(&entity) && tx.value_extracted() > 0.0 {
+            Some(7) // actively being drained
+        } else if tx.is_immune() {
+            Some(6) // protected
+        } else if targeted.contains(&entity) {
+            Some(5) // locked on by enemy
+        } else {
+            None // let the animation loop run normally (0-3)
+        };
+
+        if let Some(frame) = status_frame {
+            atlas.index = frame;
+        } else if atlas.index >= 4 {
+            // status cleared — snap back into the animation strip
+            atlas.index = 0;
+        }
     }
 }
 

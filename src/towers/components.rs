@@ -104,6 +104,14 @@ impl TowerType {
     }
 }
 
+/// A homing projectile fired by the Solver tower.
+#[derive(Component)]
+pub struct Projectile {
+    pub target: Entity,
+    pub speed: f32,
+    pub damage: f32,
+}
+
 /// A placed defense tower.
 #[derive(Component)]
 pub struct Tower {
