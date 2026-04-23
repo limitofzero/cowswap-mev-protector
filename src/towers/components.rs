@@ -67,6 +67,8 @@ impl TowerType {
     pub fn sprite_path(&self) -> Option<&'static str> {
         match self {
             TowerType::BatchAuctioneer => Some("cowswap_tower_batch.png"),
+            TowerType::CoWMatcher => Some("cowswap_tower_cow.png"),
+            TowerType::DarkPoolNode => Some("cowswap_tower_dark.png"),
             _ => None,
         }
     }

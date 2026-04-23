@@ -57,27 +57,48 @@ pub fn enemy_movement(
 }
 
 /// Spawn the starter enemy roster for testing.
-pub fn spawn_initial_enemies(mut commands: Commands) {
+pub fn spawn_initial_enemies(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+) {
     let roster: &[(EnemyType, Vec2)] = &[
         (EnemyType::Frontrunner, Vec2::new(-200.0, 280.0)),
         (EnemyType::Backrunner, Vec2::new(150.0, -280.0)),
-        (EnemyType::SandwichBot, Vec2::new(-50.0, 260.0)),
-        (EnemyType::SandwichBot, Vec2::new(-50.0, -260.0)),
-        (EnemyType::Liquidator, Vec2::new(300.0, 260.0)),
-        (EnemyType::GeneralizedFrontrunner, Vec2::new(-400.0, -260.0)),
-        (EnemyType::JitLp, Vec2::new(480.0, 200.0)),
+        // (EnemyType::SandwichBot, Vec2::new(-50.0, 260.0)),
+        // (EnemyType::SandwichBot, Vec2::new(-50.0, -260.0)),
+        // (EnemyType::Liquidator, Vec2::new(300.0, 260.0)),
+        // (EnemyType::GeneralizedFrontrunner, Vec2::new(-400.0, -260.0)),
+        // (EnemyType::JitLp, Vec2::new(480.0, 200.0)),
     ];
+
+    let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 4, 1, None, None);
+    let layout_handle = layouts.add(layout);
+
 
     for (enemy_type, pos) in roster {
         let color = enemy_type.color();
         let size = enemy_type.size();
 
-        commands.spawn((
+        let sprite = if let Some(sprite_path) = enemy_type.sprite_path() {
+            Sprite {
+                image: asset_server.load(sprite_path),
+                texture_atlas: Some(
+                    TextureAtlas { layout: layout_handle.clone(), index: 0 }
+                ),
+                custom_size: Some(Vec2::splat(size)),
+                ..default()
+            }
+        } else {
             Sprite {
                 color,
                 custom_size: Some(Vec2::splat(size)),
                 ..default()
-            },
+            }
+        };
+        
+        commands.spawn((
+            sprite,
             Transform::from_xyz(pos.x, pos.y, 1.5),
             Enemy::new(enemy_type.clone()),
             Name::new(format!("{enemy_type:?}")),

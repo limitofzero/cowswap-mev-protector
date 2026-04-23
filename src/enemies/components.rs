@@ -66,6 +66,14 @@ impl EnemyType {
             _ => 18.0,
         }
     }
+
+    pub fn sprite_path(&self) -> Option<&'static str> {
+        match self {
+            EnemyType::Frontrunner => Some("cowswap_frontrunner.png"),
+            EnemyType::Backrunner => Some("cowswap_backrunner.png"),
+            _ => None,
+        }
+    }
 }
 
 /// The MEV bot entity component.

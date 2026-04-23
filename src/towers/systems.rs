@@ -97,7 +97,6 @@ pub fn spawn_initial_towers(
         (TowerType::BatchAuctioneer, Vec2::new(-300.0, -100.0)),
         (TowerType::CoWMatcher, Vec2::new(0.0, 140.0)),
         (TowerType::DarkPoolNode, Vec2::new(250.0, -130.0)),
-        (TowerType::SlippageGuard, Vec2::new(-120.0, -150.0)),
     ];
 
     let texture_layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 4, 1, None, None);
