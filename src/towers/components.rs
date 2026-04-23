@@ -131,6 +131,12 @@ pub struct Projectile {
     pub damage: f32,
 }
 
+/// Holds shared atlas layout used by all tower sprites.
+#[derive(Resource, Default)]
+pub struct TowerAssets {
+    pub layout: Option<Handle<TextureAtlasLayout>>,
+}
+
 /// A placed defense tower.
 #[derive(Component)]
 pub struct Tower {

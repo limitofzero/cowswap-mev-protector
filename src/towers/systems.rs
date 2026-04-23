@@ -7,7 +7,7 @@ use crate::{
     transactions::{components::ImmunitySource, Transaction},
 };
 
-use super::components::{AnimationTimer, GhostTower, Projectile, Tower, TowerType};
+use super::components::{AnimationTimer, GhostTower, Projectile, Tower, TowerAssets, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
@@ -154,6 +154,7 @@ pub fn spawn_initial_towers(
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut tower_assets: ResMut<TowerAssets>,
 ) {
     let layout: &[(TowerType, Vec2)] = &[
         (TowerType::BatchAuctioneer,    Vec2::new(-300.0, -100.0)),
@@ -165,6 +166,7 @@ pub fn spawn_initial_towers(
 
     let texture_layout = TextureAtlasLayout::from_grid(UVec2::new(84, 122), 6, 1, None, None);
     let layout_handle = layouts.add(texture_layout);
+    tower_assets.layout = Some(layout_handle.clone());
 
     for (tower_type, pos) in layout {
         let color = tower_type.color();
@@ -315,6 +317,8 @@ pub fn handle_placement_click(
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    asset_server: Res<AssetServer>,
+    tower_assets: Res<TowerAssets>,
 ) {
     let PlacementMode::Placing(ref tower_type) = *placement_mode else { return };
 
@@ -363,10 +367,24 @@ pub fn handle_placement_click(
         })),
         Transform::from_xyz(pos.x, pos.y, 0.15),
     ));
-    commands.spawn((
-        Sprite { color, custom_size: Some(Vec2::splat(26.0)), ..default() },
+    let sprite = if let (Some(image_path), Some(layout)) = (tower_type.sprite_path(), &tower_assets.layout) {
+        Sprite {
+            image: asset_server.load(image_path),
+            texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
+            custom_size: Some(Vec2::new(84.0, 122.0)),
+            ..default()
+        }
+    } else {
+        Sprite { color, custom_size: Some(Vec2::splat(26.0)), ..default() }
+    };
+
+    let mut entity = commands.spawn((
+        sprite,
         Transform::from_xyz(pos.x, pos.y, 10.0),
         Tower::new(tower_type.clone()),
         Name::new(format!("Tower::{}", tower_type.label())),
     ));
+    if tower_type.sprite_path().is_some() {
+        entity.insert(AnimationTimer::new(3.0, 6));
+    }
 }

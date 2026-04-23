@@ -11,8 +11,9 @@ pub struct UiPlugin;
 
 const BAR_H: f32 = 34.0;
 const BAR_Z: f32 = 90.0;
-const BTN_W: f32 = 72.0;
+const BTN_W: f32 = 88.0;
 const BTN_H: f32 = 24.0;
+const BTN_GAP: f32 = 12.0;
 const SHOP_TOWERS: [TowerType; 5] = [
     TowerType::BatchAuctioneer,
     TowerType::CoWMatcher,
@@ -54,10 +55,10 @@ fn setup_world_ui(mut commands: Commands) {
     ));
 
     let stats = [
-        (StatKind::Settled,   "Settled: 0",       Color::WHITE,                      -480.0_f32),
-        (StatKind::Protected, "Protected: 0 COW", Color::srgb(0.30, 1.00, 0.45),    -260.0),
-        (StatKind::Extracted, "Extracted: 0 COW", Color::srgb(1.00, 0.35, 0.35),     -30.0),
-        (StatKind::Balance,   "Balance: 300 COW", Color::srgb(0.80, 0.65, 1.00),     220.0),
+        (StatKind::Settled,   "Settled: 0",       Color::WHITE,                      -420.0_f32),
+        (StatKind::Protected, "Protected: 0 COW", Color::srgb(0.30, 1.00, 0.45),    -180.0),
+        (StatKind::Extracted, "Extracted: 0 COW", Color::srgb(1.00, 0.35, 0.35),      80.0),
+        (StatKind::Balance,   "Balance: 300 COW", Color::srgb(0.80, 0.65, 1.00),     340.0),
     ];
     for (kind, text, color, x) in stats {
         commands.spawn((
@@ -81,12 +82,13 @@ fn setup_world_ui(mut commands: Commands) {
         Name::new("BottomBarBg"),
     ));
 
-    // "BUILD" label
+    // "BUILD" label — left of the first button
+    let first_btn_x = btn_x(0);
     commands.spawn((
         Text2d::new("BUILD"),
         TextFont { font_size: 11.0, ..default() },
         TextColor(Color::srgb(0.5, 0.5, 0.5)),
-        Transform::from_xyz(-530.0, 0.0, BAR_Z + 1.0),
+        Transform::from_xyz(first_btn_x - BTN_W * 0.5 - 36.0, 0.0, BAR_Z + 1.0),
         BottomBar,
     ));
 
@@ -120,18 +122,21 @@ fn setup_world_ui(mut commands: Commands) {
         ));
     }
 
-    // Cancel hint
+    // Cancel hint — right of the last button
+    let last_btn_x = btn_x(SHOP_TOWERS.len() - 1);
     commands.spawn((
         Text2d::new("RMB/Esc: cancel"),
         TextFont { font_size: 10.0, ..default() },
         TextColor(Color::srgb(0.4, 0.4, 0.4)),
-        Transform::from_xyz(470.0, 0.0, BAR_Z + 1.0),
+        Transform::from_xyz(last_btn_x + BTN_W * 0.5 + 42.0, 0.0, BAR_Z + 1.0),
         BottomBar,
     ));
 }
 
 fn btn_x(idx: usize) -> f32 {
-    -390.0 + idx as f32 * (BTN_W + 8.0)
+    let n = SHOP_TOWERS.len() as f32;
+    let total = n * BTN_W + (n - 1.0) * BTN_GAP;
+    -total * 0.5 + idx as f32 * (BTN_W + BTN_GAP) + BTN_W * 0.5
 }
 
 /// Reposition both bars to the top/bottom of the current window every frame.
