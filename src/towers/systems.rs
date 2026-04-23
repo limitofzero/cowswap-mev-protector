@@ -94,10 +94,11 @@ pub fn tint_shielded_transactions(
     mut query: Query<(&mut Sprite, Option<&MevImmunity>), With<Transaction>>,
 ) {
     for (mut sprite, immunity) in &mut query {
-        if immunity.is_some() {
-            sprite.color = Color::srgb(0.2, 0.9, 0.9);
-        }
-        // Non-immune tinting is handled by transactions::systems::tint_transactions
+        sprite.color = if immunity.is_some() {
+            Color::srgb(0.2, 0.9, 0.9)
+        } else {
+            Color::WHITE
+        };
     }
 }
 

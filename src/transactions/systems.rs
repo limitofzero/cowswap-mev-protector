@@ -2,9 +2,64 @@ use bevy::prelude::*;
 
 use crate::{mempool::MempoolPath, resources::GameScore, towers::AnimationTimer};
 
-use super::components::{MevImmunity, Transaction};
+use super::{
+    components::{MevImmunity, TokenType, Transaction},
+    resources::TxSpawner,
+};
 
-/// Advance every transaction along the path; despawn those that reach settlement.
+static TX_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn setup_tx_spawner(
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut spawner: ResMut<TxSpawner>,
+) {
+    spawner.layout = Some(layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::new(80, 88), 8, 1, None, None,
+    )));
+    spawner.textures = TokenType::ALL
+        .iter()
+        .map(|t| asset_server.load(t.sprite_path()))
+        .collect();
+}
+
+pub fn spawn_transactions(
+    mut commands: Commands,
+    path: Res<MempoolPath>,
+    mut spawner: ResMut<TxSpawner>,
+    time: Res<Time>,
+) {
+    spawner.timer.tick(time.delta());
+    if !spawner.timer.just_finished() {
+        return;
+    }
+    let (Some(layout), true) = (spawner.layout.clone(), !spawner.textures.is_empty()) else {
+        return;
+    };
+
+    let (token, texture) = spawner.rand_token();
+    let start_frame = spawner.rand_usize(8);
+    let start_progress = spawner.rand_f32() * 0.25;
+    let value = 0.5 + spawner.rand_f32() * 3.0;
+    let speed = 0.04 + spawner.rand_f32() * 0.06;
+    let pos = path.position_at(start_progress);
+    let id = TX_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    commands.spawn((
+        Sprite {
+            image: texture,
+            texture_atlas: Some(TextureAtlas { layout, index: start_frame }),
+            custom_size: Some(Vec2::new(40.0, 48.0)),
+            ..default()
+        },
+        Transform::from_xyz(pos.x, pos.y, 1.0),
+        Transaction::new(value, speed),
+        token,
+        AnimationTimer::new(5.0, 8),
+        Name::new(format!("Tx{id}")),
+    ));
+}
+
 pub fn move_transactions(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Transaction, &mut Transform)>,
@@ -29,7 +84,6 @@ pub fn move_transactions(
     }
 }
 
-/// Tick immunity timers and remove expired shields.
 pub fn tick_mev_immunity(
     mut commands: Commands,
     mut query: Query<(Entity, &mut MevImmunity)>,
@@ -40,63 +94,5 @@ pub fn tick_mev_immunity(
         if immunity.duration.just_finished() {
             commands.entity(entity).remove::<MevImmunity>();
         }
-    }
-}
-
-/// Tint transactions based on remaining value — only for non-sprite transactions.
-pub fn tint_transactions(mut query: Query<(&Transaction, &mut Sprite)>) {
-    for (tx, mut sprite) in &mut query {
-        if sprite.texture_atlas.is_some() {
-            // Sprite transactions: stay white (full color) unless handled by tint_shielded
-            sprite.color = Color::WHITE;
-            continue;
-        }
-        let ratio = if tx.value > 0.0 { tx.remaining_value / tx.value } else { 0.0 };
-        sprite.color = Color::srgb(0.9, 0.65 * ratio + 0.05, 0.05);
-    }
-}
-
-const TOKEN_SPRITES: [&str; 6] = [
-    "tx_eth.png", "tx_usdt.png", "tx_usdc.png",
-    "tx_cow.png", "tx_dai.png",  "tx_wbtc.png",
-];
-
-/// Spawn the initial set of test transactions at the path origin.
-pub fn spawn_initial_transactions(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
-    path: Res<MempoolPath>,
-) {
-    let start = path.position_at(0.0);
-    // Each tx_*.png is a single-row spritesheet: 8 frames × 80×88px
-    let layout = layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::new(80, 88), 8, 1, None, None,
-    ));
-
-    let txs = [
-        (1.5_f32, 0.06_f32),
-        (0.8, 0.08),
-        (3.0, 0.04),
-        (1.0, 0.07),
-        (2.2, 0.05),
-    ];
-
-    for (i, (value, speed)) in txs.iter().enumerate() {
-        let sprite_path = TOKEN_SPRITES[i % TOKEN_SPRITES.len()];
-        let texture = asset_server.load(sprite_path);
-        let offset_y = (i as f32 - 2.0) * 8.0;
-        commands.spawn((
-            Sprite {
-                image: texture,
-                texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
-                custom_size: Some(Vec2::new(40.0, 48.0)),
-                ..default()
-            },
-            Transform::from_xyz(start.x, start.y + offset_y, 1.0),
-            Transaction::new(*value, *speed),
-            AnimationTimer::new(5.0, 8),
-            Name::new(format!("Tx{i}")),
-        ));
     }
 }

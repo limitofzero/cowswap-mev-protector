@@ -1,5 +1,33 @@
 use bevy::prelude::*;
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenType {
+    Eth,
+    Usdt,
+    Usdc,
+    Cow,
+    Dai,
+    Wbtc,
+}
+
+impl TokenType {
+    pub const ALL: [TokenType; 6] = [
+        TokenType::Eth, TokenType::Usdt, TokenType::Usdc,
+        TokenType::Cow, TokenType::Dai,  TokenType::Wbtc,
+    ];
+
+    pub fn sprite_path(self) -> &'static str {
+        match self {
+            TokenType::Eth  => "tx_eth.png",
+            TokenType::Usdt => "tx_usdt.png",
+            TokenType::Usdc => "tx_usdc.png",
+            TokenType::Cow  => "tx_cow.png",
+            TokenType::Dai  => "tx_dai.png",
+            TokenType::Wbtc => "tx_wbtc.png",
+        }
+    }
+}
+
 /// A pending transaction moving through the mempool river.
 #[derive(Component)]
 pub struct Transaction {
