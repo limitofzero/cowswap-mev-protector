@@ -82,8 +82,8 @@ pub fn animate_sprites(
         anim.timer.tick(time.delta());
         if anim.timer.just_finished() {
             if let Some(atlas) = &mut sprite.texture_atlas {
-                // Wrap index back to 0 after last frame
-                atlas.index = (atlas.index + 1) % anim.frames;
+                let local = atlas.index.saturating_sub(anim.base);
+                atlas.index = anim.base + (local + 1) % anim.frames;
             }
         }
     }

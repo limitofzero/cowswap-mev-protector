@@ -4,7 +4,10 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct AnimationTimer {
     pub timer: Timer,
+    /// How many frames to cycle through.
     pub frames: usize,
+    /// Atlas index of the first frame in this animation strip.
+    pub base: usize,
 }
 
 impl AnimationTimer {
@@ -12,6 +15,15 @@ impl AnimationTimer {
         Self {
             timer: Timer::from_seconds(1.0 / fps, TimerMode::Repeating),
             frames,
+            base: 0,
+        }
+    }
+
+    pub fn new_with_offset(fps: f32, frames: usize, base: usize) -> Self {
+        Self {
+            timer: Timer::from_seconds(1.0 / fps, TimerMode::Repeating),
+            frames,
+            base,
         }
     }
 }
