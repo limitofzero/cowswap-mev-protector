@@ -110,12 +110,15 @@ pub fn spawn_initial_towers(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let layout: &[(TowerType, Vec2)] = &[
-        (TowerType::BatchAuctioneer, Vec2::new(-300.0, -100.0)),
-        (TowerType::CoWMatcher, Vec2::new(0.0, 140.0)),
-        (TowerType::DarkPoolNode, Vec2::new(250.0, -130.0)),
+        (TowerType::BatchAuctioneer,    Vec2::new(-300.0, -100.0)),
+        (TowerType::CoWMatcher,         Vec2::new(  0.0,  140.0)),
+        (TowerType::DarkPoolNode,       Vec2::new(250.0, -130.0)),
+        (TowerType::Solver,             Vec2::new(-150.0,  170.0)),
+        (TowerType::SlippageGuard,      Vec2::new( 180.0,  120.0)),
+        (TowerType::CommitRevealBeacon, Vec2::new(-280.0,  130.0)),
     ];
 
-    let texture_layout = TextureAtlasLayout::from_grid(UVec2::new(104, 128), 4, 1, None, None);
+    let texture_layout = TextureAtlasLayout::from_grid(UVec2::new(84, 122), 6, 1, None, None);
     let layout_handle = layouts.add(texture_layout);
 
     for (tower_type, pos) in layout {
@@ -145,7 +148,7 @@ pub fn spawn_initial_towers(
             Sprite {
                 image: texture,
                 texture_atlas: Some(TextureAtlas { layout: layout_handle.clone(), index: 0 }),
-                custom_size: Some(Vec2::new(104.0, 128.0)),
+                custom_size: Some(Vec2::new(84.0, 122.0)),
                 ..default()
             }
         } else {
@@ -165,7 +168,7 @@ pub fn spawn_initial_towers(
         ));
         // Only add animation if this tower has a spritesheet
         if tower_type.sprite_path().is_some() {
-            entity.insert(AnimationTimer::new(3.0, 4));
+            entity.insert(AnimationTimer::new(3.0, 6));
         }
     }
 }
