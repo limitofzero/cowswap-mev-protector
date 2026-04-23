@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{mempool::MempoolPath, resources::GameScore, towers::AnimationTimer};
 
 use super::{
-    components::{MevImmunity, TokenType, Transaction},
+    components::{TokenType, Transaction},
     resources::TxSpawner,
 };
 
@@ -38,10 +38,10 @@ pub fn spawn_transactions(
     };
 
     let (token, texture) = spawner.rand_token();
-    let start_frame = spawner.rand_usize(8);
+    let start_frame = spawner.rand_usize(4);
     let start_progress = spawner.rand_f32() * 0.25;
     let value = 0.5 + spawner.rand_f32() * 3.0;
-    let speed = 0.04 + spawner.rand_f32() * 0.06;
+    let speed = 0.028 + spawner.rand_f32() * 0.008; // ~30-36 sec to traverse
     let pos = path.position_at(start_progress);
     let id = TX_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -55,7 +55,7 @@ pub fn spawn_transactions(
         Transform::from_xyz(pos.x, pos.y, 1.0),
         Transaction::new(value, speed),
         token,
-        AnimationTimer::new(5.0, 8),
+        AnimationTimer::new(5.0, 4),
         Name::new(format!("Tx{id}")),
     ));
 }
@@ -69,6 +69,7 @@ pub fn move_transactions(
 ) {
     for (entity, mut tx, mut transform) in &mut query {
         tx.progress += tx.speed * time.delta_secs();
+        tx.tick_immunity(time.delta());
 
         if tx.progress >= 1.0 {
             score.txs_settled += 1;
@@ -81,18 +82,5 @@ pub fn move_transactions(
         let pos = path.position_at(tx.progress);
         transform.translation.x = pos.x;
         transform.translation.y = pos.y;
-    }
-}
-
-pub fn tick_mev_immunity(
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut MevImmunity)>,
-    time: Res<Time>,
-) {
-    for (entity, mut immunity) in &mut query {
-        immunity.duration.tick(time.delta());
-        if immunity.duration.just_finished() {
-            commands.entity(entity).remove::<MevImmunity>();
-        }
     }
 }

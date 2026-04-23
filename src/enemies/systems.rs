@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
-use crate::transactions::{MevImmunity, Transaction};
+use crate::transactions::Transaction;
 
 use super::components::{Enemy, EnemyType};
 
-/// Phase 1 — find the nearest un-shielded transaction for each enemy.
+/// Phase 1 — find the nearest non-immune transaction for each enemy.
 pub fn find_enemy_targets(
     mut enemy_query: Query<(&mut Enemy, &Transform)>,
-    tx_query: Query<(Entity, &Transform), (With<Transaction>, Without<MevImmunity>)>,
+    tx_query: Query<(Entity, &Transaction, &Transform)>,
 ) {
     for (mut enemy, enemy_transform) in &mut enemy_query {
         let pos = enemy_transform.translation.truncate();
@@ -15,7 +15,8 @@ pub fn find_enemy_targets(
 
         enemy.target = tx_query
             .iter()
-            .filter_map(|(e, tx_t)| {
+            .filter_map(|(e, tx, tx_t)| {
+                if tx.is_immune() { return None; }
                 let d = pos.distance(tx_t.translation.truncate());
                 if d <= range { Some((e, d)) } else { None }
             })

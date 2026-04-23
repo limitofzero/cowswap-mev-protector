@@ -2,12 +2,7 @@ use bevy::prelude::*;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {
-    Eth,
-    Usdt,
-    Usdc,
-    Cow,
-    Dai,
-    Wbtc,
+    Eth, Usdt, Usdc, Cow, Dai, Wbtc,
 }
 
 impl TokenType {
@@ -28,17 +23,20 @@ impl TokenType {
     }
 }
 
-/// A pending transaction moving through the mempool river.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImmunitySource { CoWMatch, DarkPool, CommitReveal }
+
+/// All mutable state lives here — no component inserts/removes, no archetype changes.
 #[derive(Component)]
 pub struct Transaction {
-    /// Normalised progress along the path `[0.0 … 1.0]`.
     pub progress: f32,
-    /// Progress units advanced per second.
     pub speed: f32,
-    /// Original ETH value submitted.
     pub value: f32,
-    /// Value remaining after MEV extraction.
     pub remaining_value: f32,
+    /// Active MEV immunity, if any.
+    pub immunity: Option<(Timer, ImmunitySource)>,
+    /// Batch membership: (batch_id, batch_size).
+    pub batch: Option<(u32, u32)>,
 }
 
 impl Transaction {
@@ -48,40 +46,31 @@ impl Transaction {
             speed,
             value,
             remaining_value: value,
+            immunity: None,
+            batch: None,
         }
     }
 
-    pub fn value_extracted(&self) -> f32 {
-        self.value - self.remaining_value
+    pub fn grant_immunity(&mut self, secs: f32, source: ImmunitySource) {
+        self.immunity = Some((Timer::from_seconds(secs, TimerMode::Once), source));
     }
 
-    pub fn is_worthless(&self) -> bool {
-        self.remaining_value <= 0.0
+    pub fn set_batch(&mut self, id: u32, size: u32) {
+        self.batch = Some((id, size));
     }
-}
 
-/// Marks a transaction as part of a CoW batch auction.
-/// Batched transactions cannot be individually front-run.
-#[derive(Component)]
-pub struct Batched {
-    pub batch_id: u32,
-    pub batch_size: u32,
-}
+    pub fn is_immune(&self) -> bool { self.immunity.is_some() }
+    pub fn is_batched(&self) -> bool { self.batch.is_some() }
 
-/// Temporary MEV immunity shield.
-/// Enemies cannot extract value from a shielded transaction.
-#[derive(Component)]
-pub struct MevImmunity {
-    pub duration: Timer,
-    pub source: ImmunitySource,
-}
+    pub fn tick_immunity(&mut self, delta: std::time::Duration) {
+        if let Some((timer, _)) = &mut self.immunity {
+            timer.tick(delta);
+            if timer.just_finished() {
+                self.immunity = None;
+            }
+        }
+    }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ImmunitySource {
-    /// Granted by a CoW Matcher tower pairing a buy + sell tx.
-    CoWMatch,
-    /// Granted by a Dark Pool Node tower temporarily hiding the tx.
-    DarkPool,
-    /// Granted by a Commit-Reveal Beacon tower.
-    CommitReveal,
+    pub fn value_extracted(&self) -> f32 { self.value - self.remaining_value }
+    pub fn is_worthless(&self) -> bool { self.remaining_value <= 0.0 }
 }

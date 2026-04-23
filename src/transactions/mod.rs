@@ -20,7 +20,6 @@ impl Plugin for TransactionPlugin {
                 (
                     systems::spawn_transactions,
                     systems::move_transactions,
-                    systems::tick_mev_immunity,
                 )
                     .run_if(in_state(GameState::Playing)),
             );

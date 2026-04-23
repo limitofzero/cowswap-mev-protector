@@ -1,14 +1,13 @@
 use bevy::{prelude::*, sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d}};
 
-use crate::transactions::{Batched, ImmunitySource, MevImmunity, Transaction};
+use crate::transactions::{components::ImmunitySource, Transaction};
 
 use super::components::{AnimationTimer, Tower, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
-    mut commands: Commands,
     mut tower_query: Query<(&mut Tower, &Transform)>,
-    tx_query: Query<(Entity, &Transform), With<Transaction>>,
+    mut tx_query: Query<(&mut Transaction, &Transform)>,
     time: Res<Time>,
 ) {
     for (mut tower, tower_transform) in &mut tower_query {
@@ -20,54 +19,44 @@ pub fn tick_towers(
         let tower_pos = tower_transform.translation.truncate();
         let range = tower.range;
 
-        // Collect in-range transaction entities (immutable pass — iterator consumed here)
-        let in_range: Vec<Entity> = tx_query
+        let in_range: Vec<usize> = tx_query
             .iter()
-            .filter(|(_, tx_t)| tower_pos.distance(tx_t.translation.truncate()) <= range)
-            .map(|(e, _)| e)
+            .enumerate()
+            .filter(|(_, (_, tx_t))| tower_pos.distance(tx_t.translation.truncate()) <= range)
+            .map(|(i, _)| i)
             .collect();
 
-        if in_range.is_empty() {
-            continue;
-        }
+        if in_range.is_empty() { continue; }
 
+        // Collect mutable refs by iterating again — safe since we don't hold borrows
         match &tower.tower_type {
             TowerType::CoWMatcher => {
-                // Pair the first two transactions found — grant MEV immunity to both.
-                for &entity in in_range.iter().take(2) {
-                    commands.entity(entity).insert(MevImmunity {
-                        duration: Timer::from_seconds(6.0, TimerMode::Once),
-                        source: ImmunitySource::CoWMatch,
-                    });
+                for (mut tx, _) in tx_query.iter_mut().take(2) {
+                    tx.grant_immunity(6.0, ImmunitySource::CoWMatch);
                 }
             }
             TowerType::BatchAuctioneer => {
                 let batch_size = in_range.len() as u32;
-                for (i, &entity) in in_range.iter().enumerate() {
-                    commands.entity(entity).insert(Batched {
-                        batch_id: i as u32, // simple id for now
-                        batch_size,
-                    });
+                for (i, (mut tx, _)) in tx_query.iter_mut().enumerate() {
+                    if in_range.contains(&i) {
+                        tx.set_batch(i as u32, batch_size);
+                    }
                 }
             }
             TowerType::DarkPoolNode => {
-                for &entity in &in_range {
-                    commands.entity(entity).insert(MevImmunity {
-                        duration: Timer::from_seconds(4.0, TimerMode::Once),
-                        source: ImmunitySource::DarkPool,
-                    });
+                for (mut tx, tx_t) in tx_query.iter_mut() {
+                    if tower_pos.distance(tx_t.translation.truncate()) <= range {
+                        tx.grant_immunity(4.0, ImmunitySource::DarkPool);
+                    }
                 }
             }
             TowerType::CommitRevealBeacon => {
-                for &entity in &in_range {
-                    commands.entity(entity).insert(MevImmunity {
-                        duration: Timer::from_seconds(3.0, TimerMode::Once),
-                        source: ImmunitySource::CommitReveal,
-                    });
+                for (mut tx, tx_t) in tx_query.iter_mut() {
+                    if tower_pos.distance(tx_t.translation.truncate()) <= range {
+                        tx.grant_immunity(3.0, ImmunitySource::CommitReveal);
+                    }
                 }
             }
-            // SlippageGuard and Solver effects will reduce sandwich/route profitability
-            // — placeholder, to be implemented in the next step.
             _ => {}
         }
     }
@@ -89,18 +78,6 @@ pub fn animate_sprites(
     }
 }
 
-/// Tint shielded transactions bright cyan so players can see the immunity.
-pub fn tint_shielded_transactions(
-    mut query: Query<(&mut Sprite, Option<&MevImmunity>), With<Transaction>>,
-) {
-    for (mut sprite, immunity) in &mut query {
-        sprite.color = if immunity.is_some() {
-            Color::srgb(0.2, 0.9, 0.9)
-        } else {
-            Color::WHITE
-        };
-    }
-}
 
 /// Spawn a starter set of towers for the demo scene.
 pub fn spawn_initial_towers(
@@ -126,21 +103,28 @@ pub fn spawn_initial_towers(
         let color = tower_type.color();
         let range = tower_type.range();
 
-        // Range indicator (translucent disc approximated as a large square for now)
+        let c = color.to_srgba();
+        // Fill — very transparent
         commands.spawn((
-            Mesh2d(meshes.add(Circle::new(range))),
+            Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
             MeshMaterial2d(materials.add(ColorMaterial {
-                color: Color::srgba(
-                    color.to_srgba().red,
-                    color.to_srgba().green,
-                    color.to_srgba().blue,
-                    0.07,
-                ),
+                color: Color::srgba(c.red, c.green, c.blue, 0.04),
                 alpha_mode: AlphaMode2d::Blend,
                 ..default()
             })),
             Transform::from_xyz(pos.x, pos.y, 0.1),
-            Name::new("TowerRange"),
+            Name::new("TowerRangeFill"),
+        ));
+        // Border ring — more visible
+        commands.spawn((
+            Mesh2d(meshes.add(Annulus::new(range - 0.75, range + 0.75).mesh().resolution(128))),
+            MeshMaterial2d(materials.add(ColorMaterial {
+                color: Color::srgba(c.red, c.green, c.blue, 0.55),
+                alpha_mode: AlphaMode2d::Blend,
+                ..default()
+            })),
+            Transform::from_xyz(pos.x, pos.y, 0.15),
+            Name::new("TowerRangeBorder"),
         ));
 
         let sprite = if let Some(image_path) = tower_type.sprite_path() {
