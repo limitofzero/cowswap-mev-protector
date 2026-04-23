@@ -24,24 +24,40 @@ impl Default for MempoolPath {
 }
 
 impl MempoolPath {
-    /// World position at normalised progress `t ∈ [0, 1]`.
-    /// Linearly interpolates between the nearest pair of waypoints.
+    /// World position at normalised progress `t ∈ [0, 1]` using Catmull-Rom spline.
     pub fn position_at(&self, t: f32) -> Vec2 {
         let n = self.waypoints.len();
-        if n == 0 {
-            return Vec2::ZERO;
-        }
-        if n == 1 {
-            return self.waypoints[0];
-        }
+        if n == 0 { return Vec2::ZERO; }
+        if n == 1 { return self.waypoints[0]; }
         let segments = (n - 1) as f32;
         let scaled = t.clamp(0.0, 1.0) * segments;
         let idx = (scaled.floor() as usize).min(n - 2);
-        self.waypoints[idx].lerp(self.waypoints[idx + 1], scaled - idx as f32)
+        let local_t = scaled - idx as f32;
+        let p0 = self.waypoints[idx.saturating_sub(1)];
+        let p1 = self.waypoints[idx];
+        let p2 = self.waypoints[(idx + 1).min(n - 1)];
+        let p3 = self.waypoints[(idx + 2).min(n - 1)];
+        catmull_rom(p0, p1, p2, p3, local_t)
     }
 
-    /// Approximate total path length (sum of segment lengths).
+    /// Approximate total path length sampled along the spline.
     pub fn total_length(&self) -> f32 {
-        self.waypoints.windows(2).map(|w| w[0].distance(w[1])).sum()
+        let samples = 64;
+        (0..samples)
+            .map(|i| {
+                let a = self.position_at(i as f32 / samples as f32);
+                let b = self.position_at((i + 1) as f32 / samples as f32);
+                a.distance(b)
+            })
+            .sum()
     }
+}
+
+fn catmull_rom(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, t: f32) -> Vec2 {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    0.5 * ((2.0 * p1)
+        + (-p0 + p2) * t
+        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
 }
