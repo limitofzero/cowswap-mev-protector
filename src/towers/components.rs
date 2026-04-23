@@ -92,6 +92,17 @@ impl TowerType {
         }
     }
 
+    pub fn cost(&self) -> f32 {
+        match self {
+            TowerType::BatchAuctioneer => 150.0,
+            TowerType::CoWMatcher => 200.0,
+            TowerType::Solver => 180.0,
+            TowerType::SlippageGuard => 130.0,
+            TowerType::DarkPoolNode => 220.0,
+            TowerType::CommitRevealBeacon => 160.0,
+        }
+    }
+
     pub fn sprite_path(&self) -> Option<&'static str> {
         match self {
             TowerType::BatchAuctioneer    => Some("tower_ba.png"),
@@ -103,6 +114,14 @@ impl TowerType {
         }
     }
 }
+
+/// Marks the semi-transparent ghost tower that follows the cursor during placement.
+#[derive(Component)]
+pub struct GhostTower(pub TowerType);
+
+/// Attached to each tower shop button in the HUD.
+#[derive(Component)]
+pub struct TowerShopButton(pub TowerType);
 
 /// A homing projectile fired by the Solver tower.
 #[derive(Component)]

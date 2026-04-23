@@ -18,6 +18,9 @@ impl Plugin for TowerPlugin {
         .add_systems(
             Update,
             (
+                systems::manage_ghost_tower,
+                systems::update_ghost_tower,
+                systems::handle_placement_click,
                 systems::tick_towers,
                 systems::move_projectiles,
                 systems::animate_sprites,

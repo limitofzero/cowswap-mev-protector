@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::towers::TowerType;
+
 /// Running totals for the current game session.
 #[derive(Resource, Default)]
 pub struct GameScore {
@@ -39,12 +41,21 @@ impl Default for WaveState {
     }
 }
 
+/// Whether the player is currently placing a tower.
+#[derive(Resource, Default, PartialEq)]
+pub enum PlacementMode {
+    #[default]
+    Idle,
+    Placing(TowerType),
+}
+
 pub struct GameResourcesPlugin;
 
 impl Plugin for GameResourcesPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameScore>()
             .init_resource::<GameEconomy>()
+            .init_resource::<PlacementMode>()
             .init_resource::<WaveState>();
     }
 }

@@ -1,8 +1,13 @@
 use bevy::{prelude::*, sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d}};
 
-use crate::{enemies::components::Enemy, transactions::{components::ImmunitySource, Transaction}};
+use crate::{
+    enemies::components::Enemy,
+    mempool::MempoolPath,
+    resources::{GameEconomy, PlacementMode},
+    transactions::{components::ImmunitySource, Transaction},
+};
 
-use super::components::{AnimationTimer, Projectile, Tower, TowerType};
+use super::components::{AnimationTimer, GhostTower, Projectile, Tower, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
@@ -218,4 +223,150 @@ pub fn spawn_initial_towers(
             entity.insert(AnimationTimer::new(3.0, 6));
         }
     }
+}
+
+// ─── Placement ────────────────────────────────────────────────────────────────
+
+fn cursor_world_pos(
+    window: &Window,
+    camera: &Camera,
+    cam_t: &GlobalTransform,
+) -> Option<Vec2> {
+    let cursor = window.cursor_position()?;
+    camera.viewport_to_world_2d(cam_t, cursor).ok()
+}
+
+fn is_valid_placement<F: bevy::ecs::query::QueryFilter>(
+    pos: Vec2,
+    path: &MempoolPath,
+    tower_q: &Query<&Transform, F>,
+) -> bool {
+    if path.is_near_path(pos, 46.0) { return false; }
+    tower_q.iter().all(|t| t.translation.truncate().distance(pos) >= 40.0)
+}
+
+/// Spawn/despawn the ghost tower when placement mode changes.
+pub fn manage_ghost_tower(
+    mut commands: Commands,
+    placement_mode: Res<PlacementMode>,
+    ghost_q: Query<(Entity, &GhostTower)>,
+) {
+    if !placement_mode.is_changed() { return; }
+    match &*placement_mode {
+        PlacementMode::Placing(tower_type) => {
+            // Despawn old ghost (different type) if present
+            for (e, _) in &ghost_q { commands.entity(e).despawn(); }
+            let c = tower_type.color().to_srgba();
+            commands.spawn((
+                Sprite {
+                    color: Color::srgba(c.red, c.green, c.blue, 0.55),
+                    custom_size: Some(Vec2::splat(28.0)),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, -9999.0, 20.0), // off-screen until cursor moves
+                GhostTower(tower_type.clone()),
+                Name::new("GhostTower"),
+            ));
+        }
+        PlacementMode::Idle => {
+            for (e, _) in &ghost_q { commands.entity(e).despawn(); }
+        }
+    }
+}
+
+/// Move the ghost to the cursor and tint it green/red based on placement validity.
+pub fn update_ghost_tower(
+    mut ghost_q: Query<(&mut Transform, &mut Sprite), With<GhostTower>>,
+    tower_q: Query<&Transform, (With<Tower>, Without<GhostTower>)>,
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    path: Res<MempoolPath>,
+    placement_mode: Res<PlacementMode>,
+) {
+    let PlacementMode::Placing(_) = &*placement_mode else { return };
+    let Ok((mut ghost_t, mut ghost_s)) = ghost_q.single_mut() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((cam, cam_t)) = camera_q.single() else { return };
+    let Some(pos) = cursor_world_pos(window, cam, cam_t) else { return };
+
+    ghost_t.translation.x = pos.x;
+    ghost_t.translation.y = pos.y;
+
+    let valid = is_valid_placement(pos, &path, &tower_q);
+    let a = ghost_s.color.alpha();
+    ghost_s.color = if valid {
+        Color::srgba(0.3, 1.0, 0.3, a)
+    } else {
+        Color::srgba(1.0, 0.25, 0.25, a)
+    };
+}
+
+/// Left-click to place, right-click / Escape to cancel.
+pub fn handle_placement_click(
+    mut commands: Commands,
+    mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut placement_mode: ResMut<PlacementMode>,
+    path: Res<MempoolPath>,
+    mut economy: ResMut<GameEconomy>,
+    tower_q: Query<&Transform, With<Tower>>,
+    ui_buttons: Query<&Interaction, With<Button>>,
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let PlacementMode::Placing(ref tower_type) = *placement_mode else { return };
+
+    if mouse.just_pressed(MouseButton::Right) || keys.just_pressed(KeyCode::Escape) {
+        *placement_mode = PlacementMode::Idle;
+        return;
+    }
+
+    if !mouse.just_pressed(MouseButton::Left) { return; }
+
+    // Don't place when clicking a UI button
+    if ui_buttons.iter().any(|i| *i == Interaction::Pressed) { return; }
+
+    let Ok(window) = windows.single() else { return };
+    let Ok((cam, cam_t)) = camera_q.single() else { return };
+    let Some(pos) = cursor_world_pos(window, cam, cam_t) else { return };
+
+    if !is_valid_placement(pos, &path, &tower_q) { return; }
+
+    let cost = tower_type.cost();
+    if economy.balance < cost { return; }
+    economy.balance -= cost;
+
+    let tower_type = tower_type.clone();
+    *placement_mode = PlacementMode::Idle;
+
+    // Spawn range visuals
+    let color = tower_type.color();
+    let range = tower_type.range();
+    let c = color.to_srgba();
+    commands.spawn((
+        Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
+        MeshMaterial2d(materials.add(ColorMaterial {
+            color: Color::srgba(c.red, c.green, c.blue, 0.04),
+            alpha_mode: AlphaMode2d::Blend,
+            ..default()
+        })),
+        Transform::from_xyz(pos.x, pos.y, 0.1),
+    ));
+    commands.spawn((
+        Mesh2d(meshes.add(Annulus::new(range - 0.75, range + 0.75).mesh().resolution(128))),
+        MeshMaterial2d(materials.add(ColorMaterial {
+            color: Color::srgba(c.red, c.green, c.blue, 0.55),
+            alpha_mode: AlphaMode2d::Blend,
+            ..default()
+        })),
+        Transform::from_xyz(pos.x, pos.y, 0.15),
+    ));
+    commands.spawn((
+        Sprite { color, custom_size: Some(Vec2::splat(26.0)), ..default() },
+        Transform::from_xyz(pos.x, pos.y, 10.0),
+        Tower::new(tower_type.clone()),
+        Name::new(format!("Tower::{}", tower_type.label())),
+    ));
 }
