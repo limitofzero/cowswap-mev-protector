@@ -157,6 +157,14 @@ pub struct Projectile {
     pub damage: f32,
 }
 
+/// One-shot hit animation — advances each tick and despawns after all frames.
+#[derive(Component)]
+pub struct HitEffect {
+    pub timer: Timer,
+    pub frames: usize,
+    pub frame: usize,
+}
+
 /// Shared sprite sheet assets for towers.
 #[derive(Resource, Default)]
 pub struct TowerAssets {
@@ -171,6 +179,12 @@ pub struct TowerAssets {
     pub icon_sheet: Option<Handle<Image>>,
     /// towers/tower_delete.png — icon for the remove button
     pub delete_icon: Option<Handle<Image>>,
+    /// solver_projectile.png — 6 cols × 1 row, 48×48 per frame
+    pub proj_layout: Option<Handle<TextureAtlasLayout>>,
+    pub proj_sheet: Option<Handle<Image>>,
+    /// solver_hit.png — 8 cols × 1 row, 80×80 per frame
+    pub hit_layout: Option<Handle<TextureAtlasLayout>>,
+    pub hit_sheet: Option<Handle<Image>>,
 }
 
 /// A placed defense tower.

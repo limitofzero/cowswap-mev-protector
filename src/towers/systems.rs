@@ -9,7 +9,7 @@ use crate::{
 
 const REMOVE_COST: f32 = 10.0;
 
-use super::components::{AnimationTimer, DeleteCursor, GhostTower, Projectile, Tower, TowerAssets, TowerRangeVisual, TowerType};
+use super::components::{AnimationTimer, DeleteCursor, GhostTower, HitEffect, Projectile, Tower, TowerAssets, TowerRangeVisual, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
@@ -17,6 +17,7 @@ pub fn tick_towers(
     mut tower_query: Query<(&mut Tower, &Transform)>,
     mut tx_query: Query<(&mut Transaction, &Transform)>,
     mut enemy_query: Query<(Entity, &mut Enemy, &Transform)>,
+    tower_assets: Res<TowerAssets>,
     time: Res<Time>,
 ) {
     for (mut tower, tower_transform) in &mut tower_query {
@@ -69,14 +70,20 @@ pub fn tick_towers(
                     .map(|(e, _, _)| e);
 
                 if let Some(target_entity) = target {
+                    let (Some(sheet), Some(layout)) = (
+                        tower_assets.proj_sheet.clone(),
+                        tower_assets.proj_layout.clone(),
+                    ) else { continue };
                     commands.spawn((
                         Sprite {
-                            color: TowerType::Solver.color(),
-                            custom_size: Some(Vec2::splat(6.0)),
+                            image: sheet,
+                            texture_atlas: Some(TextureAtlas { layout, index: 0 }),
+                            custom_size: Some(Vec2::splat(24.0)),
                             ..default()
                         },
                         Transform::from_xyz(tower_pos.x, tower_pos.y, 5.0),
                         Projectile { target: target_entity, speed: 280.0, damage: 30.0 },
+                        AnimationTimer::new(12.0, 6),
                         Name::new("Projectile"),
                     ));
                 }
@@ -97,6 +104,7 @@ pub fn move_projectiles(
     mut commands: Commands,
     mut proj_query: Query<(Entity, &Projectile, &mut Transform)>,
     mut enemy_query: Query<(&mut Enemy, &Transform), Without<Projectile>>,
+    tower_assets: Res<TowerAssets>,
     time: Res<Time>,
 ) {
     for (proj_entity, proj, mut proj_t) in &mut proj_query {
@@ -111,10 +119,41 @@ pub fn move_projectiles(
 
         if dist < 8.0 {
             enemy.hp = (enemy.hp - proj.damage).max(0.0);
+            if let (Some(sheet), Some(layout)) = (tower_assets.hit_sheet.clone(), tower_assets.hit_layout.clone()) {
+                commands.spawn((
+                    Sprite {
+                        image: sheet,
+                        texture_atlas: Some(TextureAtlas { layout, index: 0 }),
+                        custom_size: Some(Vec2::splat(48.0)),
+                        ..default()
+                    },
+                    Transform::from_xyz(proj_t.translation.x, proj_t.translation.y, 5.0),
+                    HitEffect { timer: Timer::from_seconds(1.0 / 12.0, TimerMode::Repeating), frames: 8, frame: 0 },
+                    Name::new("HitEffect"),
+                ));
+            }
             commands.entity(proj_entity).despawn();
         } else {
             let dir = (target_pos - proj_pos).normalize_or_zero();
             proj_t.translation += (dir * proj.speed * time.delta_secs()).extend(0.0);
+        }
+    }
+}
+
+/// Advance one-shot hit animations frame-by-frame; despawn after the last frame.
+pub fn tick_hit_effects(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut HitEffect, &mut Sprite)>,
+) {
+    for (entity, mut hit, mut sprite) in &mut query {
+        hit.timer.tick(time.delta());
+        if !hit.timer.just_finished() { continue; }
+        hit.frame += 1;
+        if hit.frame >= hit.frames {
+            commands.entity(entity).despawn();
+        } else if let Some(atlas) = &mut sprite.texture_atlas {
+            atlas.index = hit.frame;
         }
     }
 }
@@ -167,13 +206,20 @@ pub fn spawn_initial_towers(
     let ghost_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 5, 1, None, None));
     let icon_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(46, 59),  5, 1, None, None));
 
+    let proj_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(48), 6, 1, None, None));
+    let hit_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(80), 8, 1, None, None));
+
     tower_assets.anim_layout  = Some(anim_layout.clone());
     tower_assets.ghost_layout = Some(ghost_layout.clone());
     tower_assets.icon_layout  = Some(icon_layout.clone());
+    tower_assets.proj_layout  = Some(proj_layout);
+    tower_assets.hit_layout   = Some(hit_layout);
     tower_assets.anim_sheet   = Some(asset_server.load("towers/cowswap_towers_anim.png"));
     tower_assets.ghost_sheet  = Some(asset_server.load("towers/cowswap_towers_ghost.png"));
     tower_assets.icon_sheet   = Some(asset_server.load("towers/cowswap_towers_icons.png"));
     tower_assets.delete_icon  = Some(asset_server.load("towers/tower_delete.png"));
+    tower_assets.proj_sheet   = Some(asset_server.load("towers/solver_projectile.png"));
+    tower_assets.hit_sheet    = Some(asset_server.load("towers/solver_hit.png"));
 
     for (tower_type, pos) in layout {
         let color = tower_type.color();

@@ -26,6 +26,7 @@ impl Plugin for TowerPlugin {
                 systems::handle_remove_tower,
                 systems::tick_towers,
                 systems::move_projectiles,
+                systems::tick_hit_effects,
                 systems::animate_sprites,
                 systems::update_tower_range_visibility,
             )
