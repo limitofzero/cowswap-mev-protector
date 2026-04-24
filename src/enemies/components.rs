@@ -1,19 +1,10 @@
 use bevy::prelude::*;
 
-/// All MEV bot archetypes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EnemyType {
-    /// Copies a tx and inserts ahead — fast, races to the front.
     Frontrunner,
-    /// Captures arbitrage after a tx settles — slow, follows behind.
     Backrunner,
-    /// Two units bracket a tx — spawned in pairs, flanking from both sides.
     SandwichBot,
-    /// Clones any profitable tx — adaptive, hard to counter without batching.
-    GeneralizedFrontrunner,
-    /// Hunts low-value ("low-collateral") transactions specifically.
-    Liquidator,
-    /// Appears only near the settlement zone; steals fees at the last second.
     JitLp,
 }
 
@@ -21,75 +12,58 @@ impl EnemyType {
     pub fn move_speed(&self) -> f32 {
         match self {
             EnemyType::Frontrunner => 130.0,
-            EnemyType::Backrunner => 55.0,
+            EnemyType::Backrunner  => 55.0,
             EnemyType::SandwichBot => 90.0,
-            EnemyType::GeneralizedFrontrunner => 110.0,
-            EnemyType::Liquidator => 75.0,
-            EnemyType::JitLp => 160.0,
+            EnemyType::JitLp       => 160.0,
         }
     }
 
     pub fn max_hp(&self) -> f32 {
         match self {
             EnemyType::Frontrunner => 60.0,
-            EnemyType::Backrunner => 100.0,
+            EnemyType::Backrunner  => 100.0,
             EnemyType::SandwichBot => 80.0,
-            EnemyType::GeneralizedFrontrunner => 120.0,
-            EnemyType::Liquidator => 90.0,
-            EnemyType::JitLp => 50.0,
+            EnemyType::JitLp       => 50.0,
         }
     }
 
-    /// ETH extracted from target per second when in attack range.
     pub fn extract_rate(&self) -> f32 {
         match self {
-            EnemyType::Frontrunner => 0.18,
-            EnemyType::Backrunner => 0.08,
-            EnemyType::SandwichBot => 0.14,
-            EnemyType::GeneralizedFrontrunner => 0.22,
-            EnemyType::Liquidator => 0.30,
-            EnemyType::JitLp => 0.12,
+            EnemyType::Frontrunner => 180.0,
+            EnemyType::Backrunner  => 80.0,
+            EnemyType::SandwichBot => 140.0,
+            EnemyType::JitLp       => 120.0,
         }
     }
 
     pub fn attack_range(&self) -> f32 {
         match self {
-            EnemyType::JitLp => 40.0, // only attacks when very close to settlement
-            _ => 65.0,
+            EnemyType::JitLp => 40.0,
+            _                => 65.0,
         }
     }
 
     pub fn color(&self) -> Color {
         match self {
             EnemyType::Frontrunner => Color::srgb(0.90, 0.15, 0.15),
-            EnemyType::Backrunner => Color::srgb(0.65, 0.10, 0.50),
+            EnemyType::Backrunner  => Color::srgb(0.65, 0.10, 0.50),
             EnemyType::SandwichBot => Color::srgb(0.95, 0.50, 0.05),
-            EnemyType::GeneralizedFrontrunner => Color::srgb(1.00, 0.05, 0.30),
-            EnemyType::Liquidator => Color::srgb(0.55, 0.00, 0.60),
-            EnemyType::JitLp => Color::srgb(0.85, 0.85, 0.05),
+            EnemyType::JitLp       => Color::srgb(0.85, 0.85, 0.05),
         }
     }
 
-    pub fn size(&self) -> f32 {
-        match self {
-            EnemyType::GeneralizedFrontrunner => 22.0,
-            EnemyType::Liquidator => 20.0,
-            _ => 18.0,
-        }
-    }
+    pub fn size(&self) -> f32 { 48.0 }
 
-    pub fn sprite_path(&self) -> Option<&'static str> {
+    pub fn sprite_path(&self) -> &'static str {
         match self {
-            EnemyType::Frontrunner          => Some("enemy_frontrunner.png"),
-            EnemyType::Backrunner           => Some("enemy_backrunner.png"),
-            EnemyType::SandwichBot          => Some("enemy_sandwich.png"),
-            EnemyType::JitLp                => Some("enemy_jitlp.png"),
-            EnemyType::GeneralizedFrontrunner | EnemyType::Liquidator => None,
+            EnemyType::Frontrunner => "enemy_frontrunner.png",
+            EnemyType::Backrunner  => "enemy_backrunner.png",
+            EnemyType::SandwichBot => "enemy_sandwich.png",
+            EnemyType::JitLp       => "enemy_jitlp.png",
         }
     }
 }
 
-/// The MEV bot entity component.
 #[derive(Component)]
 pub struct Enemy {
     pub enemy_type: EnemyType,
@@ -128,17 +102,13 @@ impl Enemy {
     pub fn tick_slow(&mut self, delta: std::time::Duration) {
         if let Some(timer) = &mut self.slow_timer {
             timer.tick(delta);
-            if timer.just_finished() {
-                self.slow_timer = None;
-            }
+            if timer.just_finished() { self.slow_timer = None; }
         }
     }
 }
 
-/// Links the two halves of a sandwich attack.
-#[derive(Component)]
-pub struct SandwichPair {
-    pub partner: Option<Entity>,
-    /// `true` = the "front" unit (inserts before target), `false` = "back" unit.
-    pub is_front: bool,
+/// Shared sprite atlas handle for enemy sprites.
+#[derive(Resource, Default)]
+pub struct EnemyAssets {
+    pub layout: Option<Handle<TextureAtlasLayout>>,
 }

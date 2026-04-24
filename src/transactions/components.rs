@@ -66,7 +66,7 @@ impl TokenType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImmunitySource { CoWMatch, DarkPool, CommitReveal }
+pub enum ImmunitySource { CoWMatch, DarkPool }
 
 /// All mutable state lives here — no component inserts/removes, no archetype changes.
 #[derive(Component)]

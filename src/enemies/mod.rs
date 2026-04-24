@@ -11,7 +11,8 @@ pub struct EnemyPlugin;
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<components::EnemyAssets>()
+            .add_systems(
             OnEnter(GameState::Playing),
             systems::spawn_initial_enemies,
         )

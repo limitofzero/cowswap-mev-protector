@@ -42,8 +42,6 @@ pub enum TowerType {
     /// Routes txs through a private mempool — temporarily invisible to bots.
     /// Has a long cooldown to prevent spamming.
     DarkPoolNode,
-    /// Withholds tx details until the last moment — bots can't act on hidden info.
-    CommitRevealBeacon,
 }
 
 impl TowerType {
@@ -54,7 +52,6 @@ impl TowerType {
             TowerType::Solver => 85.0,
             TowerType::SlippageGuard => 95.0,
             TowerType::DarkPoolNode => 75.0,
-            TowerType::CommitRevealBeacon => 115.0,
         }
     }
 
@@ -65,8 +62,7 @@ impl TowerType {
             TowerType::CoWMatcher => 3.5,
             TowerType::Solver => 1.5,
             TowerType::SlippageGuard => 0.8,
-            TowerType::DarkPoolNode => 10.0, // OP if spammed — high cooldown
-            TowerType::CommitRevealBeacon => 4.0,
+            TowerType::DarkPoolNode => 10.0,
         }
     }
 
@@ -77,7 +73,6 @@ impl TowerType {
             TowerType::Solver => Color::srgb(0.40, 0.90, 0.45),
             TowerType::SlippageGuard => Color::srgb(0.85, 0.85, 0.20),
             TowerType::DarkPoolNode => Color::srgb(0.25, 0.25, 0.75),
-            TowerType::CommitRevealBeacon => Color::srgb(0.80, 0.35, 0.85),
         }
     }
 
@@ -88,7 +83,6 @@ impl TowerType {
             TowerType::Solver => "Solver",
             TowerType::SlippageGuard => "Slippage",
             TowerType::DarkPoolNode => "DarkPool",
-            TowerType::CommitRevealBeacon => "C-Reveal",
         }
     }
 
@@ -99,7 +93,6 @@ impl TowerType {
             TowerType::Solver => 180.0,
             TowerType::SlippageGuard => 130.0,
             TowerType::DarkPoolNode => 220.0,
-            TowerType::CommitRevealBeacon => 160.0,
         }
     }
 
@@ -110,7 +103,6 @@ impl TowerType {
             TowerType::Solver             => Some("tower_slv.png"),
             TowerType::SlippageGuard      => Some("tower_sg.png"),
             TowerType::DarkPoolNode       => Some("tower_dp.png"),
-            TowerType::CommitRevealBeacon => None,
         }
     }
 }

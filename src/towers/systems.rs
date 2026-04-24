@@ -56,13 +56,6 @@ pub fn tick_towers(
                     }
                 }
             }
-            TowerType::CommitRevealBeacon => {
-                for (mut tx, tx_t) in tx_query.iter_mut() {
-                    if tower_pos.distance(tx_t.translation.truncate()) <= range {
-                        tx.grant_immunity(3.0, ImmunitySource::CommitReveal);
-                    }
-                }
-            }
             TowerType::Solver => {
                 let target = enemy_query.iter()
                     .filter(|(_, _, t)| tower_pos.distance(t.translation.truncate()) <= range)
