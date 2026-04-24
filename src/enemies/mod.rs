@@ -3,16 +3,18 @@ use bevy::prelude::*;
 use crate::game::GameState;
 
 pub mod components;
+pub mod resources;
 pub mod systems;
 
 pub use components::*;
+pub use resources::*;
 
 pub struct EnemyPlugin;
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<components::EnemyAssets>()
-            .init_resource::<components::WaveManager>()
+        app.init_resource::<resources::EnemyAssets>()
+            .init_resource::<resources::WaveManager>()
             .add_systems(
                 OnEnter(GameState::Playing),
                 systems::setup_enemy_assets,

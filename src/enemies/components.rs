@@ -57,10 +57,10 @@ impl EnemyType {
 
     pub fn sprite_path(&self) -> &'static str {
         match self {
-            EnemyType::Frontrunner => "enemy_frontrunner.png",
-            EnemyType::Backrunner  => "enemy_backrunner.png",
-            EnemyType::SandwichBot => "enemy_sandwich.png",
-            EnemyType::JitLp       => "enemy_jitlp.png",
+            EnemyType::Frontrunner => "enemies/enemy_frontrunner.png",
+            EnemyType::Backrunner  => "enemies/enemy_backrunner.png",
+            EnemyType::SandwichBot => "enemies/enemy_sandwich.png",
+            EnemyType::JitLp       => "enemies/enemy_jitlp.png",
         }
     }
 }
@@ -112,110 +112,3 @@ impl Enemy {
 #[derive(Component)]
 pub struct EnemyHpBarFg;
 
-/// Pre-loaded handles for all enemy sprites and the shared atlas layout.
-#[derive(Resource, Default)]
-pub struct EnemyAssets {
-    pub layout: Option<Handle<TextureAtlasLayout>>,
-    pub frontrunner: Option<Handle<Image>>,
-    pub backrunner:  Option<Handle<Image>>,
-    pub sandwich:    Option<Handle<Image>>,
-    pub jitlp:       Option<Handle<Image>>,
-}
-
-impl EnemyAssets {
-    pub fn texture(&self, enemy_type: &EnemyType) -> Option<Handle<Image>> {
-        match enemy_type {
-            EnemyType::Frontrunner => self.frontrunner.clone(),
-            EnemyType::Backrunner  => self.backrunner.clone(),
-            EnemyType::SandwichBot => self.sandwich.clone(),
-            EnemyType::JitLp       => self.jitlp.clone(),
-        }
-    }
-}
-
-// ─── Wave system 
-
-#[derive(PartialEq, Eq)]
-pub enum WaveState {
-    Countdown,
-    Spawning,
-    WaitForClear,
-}
-
-#[derive(Resource)]
-pub struct WaveManager {
-    pub wave: u32,
-    pub state: WaveState,
-    pub between_timer: Timer,
-    pub spawn_timer: Timer,
-    pub pending: std::collections::VecDeque<EnemyType>,
-    seed: u64,
-}
-
-impl Default for WaveManager {
-    fn default() -> Self {
-        Self {
-            wave: 0,
-            state: WaveState::Countdown,
-            between_timer: Timer::from_seconds(4.0, TimerMode::Once),
-            spawn_timer: Timer::from_seconds(1.2, TimerMode::Repeating),
-            pending: Default::default(),
-            seed: 0xfeed_face_dead_beef,
-        }
-    }
-}
-
-impl WaveManager {
-    fn rng(&mut self) -> u64 {
-        self.seed ^= self.seed << 13;
-        self.seed ^= self.seed >> 7;
-        self.seed ^= self.seed << 17;
-        self.seed
-    }
-
-    pub fn rand_spawn_pos(&mut self) -> Vec2 {
-        // Spread across 8 off-screen zones so enemies arrive from all directions
-        const ZONES: &[Vec2] = &[
-            Vec2::new(-620.0,  130.0),
-            Vec2::new(-620.0, -180.0),
-            Vec2::new( 620.0,  130.0),
-            Vec2::new( 620.0, -180.0),
-            Vec2::new(  20.0,  400.0),
-            Vec2::new( -20.0, -400.0),
-            Vec2::new(-340.0,  400.0),
-            Vec2::new( 340.0, -400.0),
-        ];
-        let i = (self.rng() as usize) % ZONES.len();
-        ZONES[i]
-    }
-
-    pub fn build_wave(&mut self) {
-        self.wave += 1;
-        self.pending.clear();
-
-        // Increase enemy count each wave; cap at 10
-        let count = (2 + self.wave as usize).min(10);
-
-        // Weight towards tougher types as waves progress
-        for i in 0..count {
-            let roll = (self.rng() % 100) as u32;
-            let difficulty = self.wave.min(10);
-            let enemy = if roll < 40_u32.saturating_sub(difficulty * 3) {
-                EnemyType::Frontrunner
-            } else if roll < 65_u32.saturating_sub(difficulty) {
-                EnemyType::Backrunner
-            } else if roll < 82 {
-                EnemyType::SandwichBot
-            } else {
-                EnemyType::JitLp
-            };
-            // Guarantee at least one JitLp from wave 3 onward on the last slot
-            let enemy = if self.wave >= 3 && i == count - 1 {
-                EnemyType::JitLp
-            } else {
-                enemy
-            };
-            self.pending.push_back(enemy);
-        }
-    }
-}

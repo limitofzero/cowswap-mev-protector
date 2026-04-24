@@ -9,7 +9,8 @@ use crate::{
 
 const REMOVE_COST: f32 = 10.0;
 
-use super::components::{AnimationTimer, DeleteCursor, GhostTower, HitEffect, Projectile, Tower, TowerAssets, TowerRangeVisual, TowerType};
+use super::components::{AnimationTimer, DeleteCursor, GhostTower, HitEffect, Projectile, Tower, TowerRangeVisual, TowerType};
+use super::resources::TowerAssets;
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(

@@ -25,9 +25,9 @@ pub fn setup_tx_spawner(
     spawner.fx_layout = Some(layouts.add(TextureAtlasLayout::from_grid(
         UVec2::new(80, 88), 6, 1, None, None,
     )));
-    spawner.fx_cow      = Some(asset_server.load("fx_cow.png"));
-    spawner.fx_batch    = Some(asset_server.load("fx_batch.png"));
-    spawner.fx_darkpool = Some(asset_server.load("fx_darkpool.png"));
+    spawner.fx_cow      = Some(asset_server.load("effects/fx_cow.png"));
+    spawner.fx_batch    = Some(asset_server.load("effects/fx_batch.png"));
+    spawner.fx_darkpool = Some(asset_server.load("effects/fx_darkpool.png"));
 }
 
 pub fn spawn_transactions(

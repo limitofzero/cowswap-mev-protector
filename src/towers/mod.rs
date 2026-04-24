@@ -3,15 +3,17 @@ use bevy::prelude::*;
 use crate::game::GameState;
 
 pub mod components;
+pub mod resources;
 pub mod systems;
 
 pub use components::*;
+pub use resources::*;
 
 pub struct TowerPlugin;
 
 impl Plugin for TowerPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<components::TowerAssets>()
+        app.init_resource::<resources::TowerAssets>()
             .add_systems(
             OnEnter(GameState::Playing),
             systems::spawn_initial_towers,

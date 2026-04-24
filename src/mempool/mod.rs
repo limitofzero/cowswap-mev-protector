@@ -4,8 +4,8 @@ use crate::towers::AnimationTimer;
 
 use crate::game::GameState;
 
-pub mod path;
-pub use path::MempoolPath;
+pub mod resources;
+pub use resources::MempoolPath;
 
 // Colors matching the mockup palette
 const PATH_BASE:  Color = Color::srgb(0.098, 0.063, 0.314); // #1a1050
@@ -109,7 +109,7 @@ fn setup_scene(
 
     commands.spawn((
         Sprite {
-            image: asset_server.load("portal_mempool.png"),
+            image: asset_server.load("effects/portal_mempool.png"),
             texture_atlas: Some(TextureAtlas { layout: portal_layout.clone(), index: 0 }),
             custom_size: Some(Vec2::new(52.0, 52.0)),
             ..default()
@@ -120,7 +120,7 @@ fn setup_scene(
     ));
     commands.spawn((
         Sprite {
-            image: asset_server.load("portal_settlement.png"),
+            image: asset_server.load("effects/portal_settlement.png"),
             texture_atlas: Some(TextureAtlas { layout: portal_layout, index: 0 }),
             custom_size: Some(Vec2::new(52.0, 52.0)),
             ..default()

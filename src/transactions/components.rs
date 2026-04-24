@@ -54,7 +54,7 @@ impl TokenType {
     }
 
     pub fn sprite_path(self) -> &'static str {
-        "tx_usdc.png"
+        "txs/tx_usdc.png"
     }
 }
 

@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::{towers::AnimationTimer, transactions::Transaction};
 
-use super::components::{Enemy, EnemyAssets, EnemyHpBarFg, EnemyType, WaveManager, WaveState};
+use super::components::{Enemy, EnemyHpBarFg, EnemyType};
+use super::resources::{EnemyAssets, WaveManager, WaveState};
 
 const BAR_W: f32 = 40.0;
 const BAR_H: f32 = 5.0;
@@ -144,10 +145,10 @@ pub fn setup_enemy_assets(
     mut enemy_assets: ResMut<EnemyAssets>,
 ) {
     enemy_assets.layout      = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None)));
-    enemy_assets.frontrunner = Some(asset_server.load("enemy_frontrunner.png"));
-    enemy_assets.backrunner  = Some(asset_server.load("enemy_backrunner.png"));
-    enemy_assets.sandwich    = Some(asset_server.load("enemy_sandwich.png"));
-    enemy_assets.jitlp       = Some(asset_server.load("enemy_jitlp.png"));
+    enemy_assets.frontrunner = Some(asset_server.load("enemies/enemy_frontrunner.png"));
+    enemy_assets.backrunner  = Some(asset_server.load("enemies/enemy_backrunner.png"));
+    enemy_assets.sandwich    = Some(asset_server.load("enemies/enemy_sandwich.png"));
+    enemy_assets.jitlp       = Some(asset_server.load("enemies/enemy_jitlp.png"));
 }
 
 /// Drive the wave state machine: countdown → spawn one-by-one → wait for clear → repeat.
