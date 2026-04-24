@@ -149,12 +149,15 @@ pub fn spawn_initial_towers(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut tower_assets: ResMut<TowerAssets>,
 ) {
+    // Rails sit at y = ±170.  Tower ranges are 75-130 px, so towers must be within
+    // that distance of a rail to cover it.  Stagger between-rail towers near the
+    // top or bottom rail; place outside towers just beyond each rail edge.
     let layout: &[(TowerType, Vec2)] = &[
-        (TowerType::BatchAuctioneer,    Vec2::new(-300.0, -100.0)),
-        (TowerType::CoWMatcher,         Vec2::new(  0.0,  140.0)),
-        (TowerType::DarkPoolNode,       Vec2::new(250.0, -130.0)),
-        (TowerType::Solver,             Vec2::new(-150.0,  170.0)),
-        (TowerType::SlippageGuard,      Vec2::new( 180.0,  120.0)),
+        (TowerType::CoWMatcher,      Vec2::new(-380.0,  90.0)),  // near top rail   (gap 80 < 110)
+        (TowerType::BatchAuctioneer, Vec2::new( -80.0, -65.0)),  // near bottom rail (gap 105 < 130)
+        (TowerType::DarkPoolNode,    Vec2::new( 220.0, 100.0)),  // near top rail   (gap 70 < 75)
+        (TowerType::Solver,          Vec2::new(-200.0, 240.0)),  // outside top rail (gap 70 < 85)
+        (TowerType::SlippageGuard,   Vec2::new(-200.0,-245.0)),  // outside bottom rail (gap 75 < 95)
     ];
 
     // Load sprite sheets

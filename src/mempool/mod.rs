@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
+use crate::towers::AnimationTimer;
 
 use crate::game::GameState;
 
@@ -33,8 +34,10 @@ impl Plugin for MempoolPlugin {
 fn setup_scene(
     mut commands: Commands,
     path: Res<MempoolPath>,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     commands.spawn((Camera2d, Name::new("MainCamera")));
 
@@ -99,43 +102,32 @@ fn setup_scene(
         ));
     }
 
-    // Start / end text labels (matching mockup)
-    let start_pos = path.position_at(0.0);
-    let end_pos   = path.position_at(1.0);
+    // Portal animated sprites (6 frames, 52×52 each) at path entry and exit.
+    let portal_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(52, 52), 6, 1, None, None));
+    let entry_pos = path.position_at(0.0);
+    let exit_pos  = path.position_at(1.0);
 
-    let font_bold = TextFont { font_size: 11.0, ..default() };
-    let font_sub  = TextFont { font_size: 9.0,  ..default() };
-
-    // "MEMPOOL / IN →" at path start
     commands.spawn((
-        Text2d::new("MEMPOOL"),
-        font_bold.clone(),
-        TextColor(Color::srgb(0.063, 0.722, 0.506)),
-        Transform::from_xyz(start_pos.x + 4.0, start_pos.y + 22.0, 1.0),
-        Name::new("LabelMempool"),
+        Sprite {
+            image: asset_server.load("portal_mempool.png"),
+            texture_atlas: Some(TextureAtlas { layout: portal_layout.clone(), index: 0 }),
+            custom_size: Some(Vec2::new(52.0, 52.0)),
+            ..default()
+        },
+        Transform::from_xyz(entry_pos.x, entry_pos.y, 2.0),
+        AnimationTimer::new(8.0, 6),
+        Name::new("PortalMempool"),
     ));
     commands.spawn((
-        Text2d::new("IN →"),
-        font_sub.clone(),
-        TextColor(Color::srgb(0.204, 0.827, 0.608)),
-        Transform::from_xyz(start_pos.x + 4.0, start_pos.y + 10.0, 1.0),
-        Name::new("LabelIn"),
-    ));
-
-    // "→ SETTLEMENT / LAYER" at path end
-    commands.spawn((
-        Text2d::new("→ SETTLEMENT"),
-        font_bold.clone(),
-        TextColor(Color::srgb(0.941, 0.647, 0.0)),
-        Transform::from_xyz(end_pos.x - 4.0, end_pos.y + 22.0, 1.0),
-        Name::new("LabelSettlement"),
-    ));
-    commands.spawn((
-        Text2d::new("LAYER"),
-        font_sub.clone(),
-        TextColor(Color::srgb(0.984, 0.749, 0.141)),
-        Transform::from_xyz(end_pos.x - 4.0, end_pos.y + 10.0, 1.0),
-        Name::new("LabelLayer"),
+        Sprite {
+            image: asset_server.load("portal_settlement.png"),
+            texture_atlas: Some(TextureAtlas { layout: portal_layout, index: 0 }),
+            custom_size: Some(Vec2::new(52.0, 52.0)),
+            ..default()
+        },
+        Transform::from_xyz(exit_pos.x, exit_pos.y, 2.0),
+        AnimationTimer::new(8.0, 6),
+        Name::new("PortalSettlement"),
     ));
 }
 

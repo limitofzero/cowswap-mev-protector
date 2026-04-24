@@ -12,17 +12,15 @@ pub struct MempoolPath {
 
 impl Default for MempoolPath {
     fn default() -> Self {
+        // Two-lane harness: enters left on the top rail, rounds the right corner,
+        // exits left on the bottom rail.  Covers most of the 1280×720 viewport.
         let waypoints = vec![
-            Vec2::new(-640.0,  114.0),
-            Vec2::new(-441.0,  114.0),
-            Vec2::new(-353.0,   38.0),
-            Vec2::new(-353.0,  -76.0),
-            Vec2::new(-265.0, -152.0),
-            Vec2::new(  66.0, -152.0),
-            Vec2::new( 154.0,  -76.0),
-            Vec2::new( 154.0,   38.0),
-            Vec2::new( 243.0,  114.0),
-            Vec2::new( 640.0,  114.0),
+            Vec2::new(-640.0,  170.0),  // entry — left edge, top rail
+            Vec2::new( 490.0,  170.0),  // top rail straight
+            Vec2::new( 545.0,  115.0),  // corner top-right bevel
+            Vec2::new( 545.0, -115.0),  // right connector
+            Vec2::new( 490.0, -170.0),  // corner bottom-right bevel
+            Vec2::new(-640.0, -170.0),  // exit — left edge, bottom rail
         ];
         let mut seg_lens = vec![0.0f32];
         for i in 1..waypoints.len() {
