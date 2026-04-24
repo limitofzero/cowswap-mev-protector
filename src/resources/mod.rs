@@ -2,6 +2,9 @@ use bevy::prelude::*;
 
 use crate::towers::TowerType;
 
+/// 1 COW = this many USD (used for display only; all game math stays in COW).
+pub const COW_USD_RATE: f32 = 0.15;
+
 /// Running totals for the current game session.
 #[derive(Resource, Default)]
 pub struct GameScore {

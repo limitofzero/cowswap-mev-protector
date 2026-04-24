@@ -6,40 +6,55 @@ use super::components::{Enemy, EnemyAssets, EnemyHpBarFg, EnemyType, WaveManager
 
 const BAR_W: f32 = 40.0;
 const BAR_H: f32 = 5.0;
-const BAR_Y: f32 = 30.0;
+const BAR_Y: f32 = -30.0;
 
-/// Phase 1 — find the nearest non-immune transaction for each enemy (no range limit).
+/// Phase 1 — assign each enemy its nearest unclaimed tx (one enemy per tx).
 pub fn find_enemy_targets(
     mut enemy_query: Query<(&mut Enemy, &Transform)>,
     tx_query: Query<(Entity, &Transaction, &Transform)>,
 ) {
+    let mut claimed: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+
     for (mut enemy, enemy_transform) in &mut enemy_query {
         let pos = enemy_transform.translation.truncate();
 
         enemy.target = tx_query
             .iter()
             .filter_map(|(e, tx, tx_t)| {
-                if tx.is_immune() { return None; }
+                if tx.is_immune() || claimed.contains(&e) { return None; }
                 Some((e, pos.distance(tx_t.translation.truncate())))
             })
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(e, _)| e);
+
+        if let Some(t) = enemy.target { claimed.insert(t); }
     }
 }
 
 /// Phase 2 — extract value only when within attack range.
+/// Multiple enemies can target the same tx; drains are accumulated then applied once.
 pub fn extract_value(
     enemy_query: Query<(&Enemy, &Transform)>,
     mut tx_query: Query<(&mut Transaction, &Transform)>,
     time: Res<Time>,
 ) {
+    let dt = time.delta_secs();
+    let mut drains: std::collections::HashMap<Entity, f32> = std::collections::HashMap::new();
+
+    // Read pass — .get() is immutable, no aliasing issue
     for (enemy, enemy_t) in &enemy_query {
         let Some(target) = enemy.target else { continue };
-        let Ok((mut tx, tx_t)) = tx_query.get_mut(target) else { continue };
+        let Ok((tx, tx_t)) = tx_query.get(target) else { continue };
         let dist = enemy_t.translation.truncate().distance(tx_t.translation.truncate());
         if dist > enemy.attack_range { continue; }
-        let extracted = enemy.extract_rate * time.delta_secs();
-        tx.remaining_value = (tx.remaining_value - extracted).max(0.0);
+        *drains.entry(target).or_default() += tx.value * enemy.drain_rate * dt;
+    }
+
+    // Write pass — each entity touched exactly once
+    for (target, total) in drains {
+        if let Ok((mut tx, _)) = tx_query.get_mut(target) {
+            tx.remaining_value = (tx.remaining_value - total).max(0.0);
+        }
     }
 }
 

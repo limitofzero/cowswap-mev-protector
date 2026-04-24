@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     game::GameState,
     mempool::MempoolPath,
-    resources::{GameEconomy, GameScore, PlacementMode},
+    resources::{GameEconomy, GameScore, PlacementMode, COW_USD_RATE},
     towers::{TowerShopButton, TowerType},
 };
 
@@ -163,8 +163,8 @@ fn update_stats(
     for (stat, mut text) in &mut q {
         text.0 = match stat.0 {
             StatKind::Settled   => format!("Settled: {}", score.txs_settled),
-            StatKind::Protected => format!("Protected: {:.0} COW", score.value_protected),
-            StatKind::Extracted => format!("Extracted: {:.0} COW", score.value_extracted),
+            StatKind::Protected => format!("Protected: {}", fmt_usd(score.value_protected * COW_USD_RATE)),
+            StatKind::Extracted => format!("Extracted: {}", fmt_usd(score.value_extracted * COW_USD_RATE)),
             StatKind::Balance   => format!("Balance: {:.0} COW", economy.balance),
         };
     }
@@ -208,4 +208,14 @@ pub fn handle_shop_click(
         *placement_mode = PlacementMode::Idle;
     }
     let _ = path; // suppress unused warning
+}
+
+fn fmt_usd(usd: f32) -> String {
+    if usd >= 1_000_000.0 {
+        format!("${:.1}M", usd / 1_000_000.0)
+    } else if usd >= 1_000.0 {
+        format!("${:.1}k", usd / 1_000.0)
+    } else {
+        format!("${:.2}", usd)
+    }
 }

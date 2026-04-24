@@ -21,6 +21,7 @@ impl Plugin for TransactionPlugin {
                     systems::spawn_transactions,
                     systems::move_transactions,
                     systems::update_tx_sprites,
+                    systems::update_tx_labels,
                 )
                     .run_if(in_state(GameState::Playing)),
             );

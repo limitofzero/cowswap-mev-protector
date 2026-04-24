@@ -72,6 +72,22 @@ pub fn spawn_transactions(
     });
 }
 
+/// Keep the child Text2d label in sync with the tx's current remaining value.
+pub fn update_tx_labels(
+    tx_query: Query<(&Transaction, &super::components::TokenType, &Children)>,
+    mut text_query: Query<&mut Text2d>,
+) {
+    for (tx, token, children) in &tx_query {
+        let native = tx.remaining_value / token.cow_rate();
+        let label = format_label(native, token.symbol());
+        for &child in children {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                text.0 = label.clone();
+            }
+        }
+    }
+}
+
 fn format_label(amount: f32, symbol: &str) -> String {
     if amount >= 1000.0 {
         format!("{:.0} {}", amount, symbol)
@@ -131,6 +147,13 @@ pub fn move_transactions(
     for (entity, mut tx, mut transform) in &mut query {
         tx.progress += tx.speed * time.delta_secs();
         tx.tick_immunity(time.delta());
+
+        if tx.is_worthless() {
+            score.value_extracted += tx.value;
+            commands.entity(entity).despawn_related::<Children>();
+            commands.entity(entity).despawn();
+            continue;
+        }
 
         if tx.progress >= 1.0 {
             let fee = tx.remaining_value * economy.fee_rate;

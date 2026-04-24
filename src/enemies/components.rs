@@ -27,12 +27,13 @@ impl EnemyType {
         }
     }
 
-    pub fn extract_rate(&self) -> f32 {
+    /// Fraction of the tx's initial value drained per second (linear).
+    pub fn drain_rate(&self) -> f32 {
         match self {
-            EnemyType::Frontrunner => 180.0,
-            EnemyType::Backrunner  => 80.0,
-            EnemyType::SandwichBot => 140.0,
-            EnemyType::JitLp       => 120.0,
+            EnemyType::Frontrunner => 0.12,
+            EnemyType::Backrunner  => 0.08,
+            EnemyType::SandwichBot => 0.18,
+            EnemyType::JitLp       => 0.22,
         }
     }
 
@@ -68,7 +69,7 @@ impl EnemyType {
 pub struct Enemy {
     pub enemy_type: EnemyType,
     pub speed: f32,
-    pub extract_rate: f32,
+    pub drain_rate: f32,
     pub attack_range: f32,
     pub target: Option<Entity>,
     pub hp: f32,
@@ -81,7 +82,7 @@ impl Enemy {
         let hp = enemy_type.max_hp();
         Self {
             speed: enemy_type.move_speed(),
-            extract_rate: enemy_type.extract_rate(),
+            drain_rate: enemy_type.drain_rate(),
             attack_range: enemy_type.attack_range(),
             target: None,
             hp,
