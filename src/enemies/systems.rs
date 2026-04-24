@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::transactions::Transaction;
+use crate::{towers::AnimationTimer, transactions::Transaction};
 
 use super::components::{Enemy, EnemyType};
 
@@ -72,23 +72,40 @@ pub fn check_enemy_deaths(mut commands: Commands, query: Query<(Entity, &Enemy)>
 }
 
 /// Spawn the starter enemy roster.
-pub fn spawn_initial_enemies(mut commands: Commands) {
+pub fn spawn_initial_enemies(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+) {
     let roster: &[(EnemyType, Vec2)] = &[
         (EnemyType::Frontrunner, Vec2::new(-400.0,  60.0)),
         (EnemyType::Backrunner,  Vec2::new( 200.0, -100.0)),
         (EnemyType::Frontrunner, Vec2::new( -50.0, -100.0)),
     ];
 
+    let layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None));
+
     for (enemy_type, pos) in roster {
-        commands.spawn((
+        let size = enemy_type.size();
+        let sprite = if let Some(path) = enemy_type.sprite_path() {
             Sprite {
-                color: enemy_type.color(),
-                custom_size: Some(Vec2::splat(enemy_type.size())),
+                image: asset_server.load(path),
+                texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
+                custom_size: Some(Vec2::splat(size)),
                 ..default()
-            },
+            }
+        } else {
+            Sprite { color: enemy_type.color(), custom_size: Some(Vec2::splat(size)), ..default() }
+        };
+
+        let mut entity = commands.spawn((
+            sprite,
             Transform::from_xyz(pos.x, pos.y, 1.5),
             Enemy::new(enemy_type.clone()),
             Name::new(format!("{enemy_type:?}")),
         ));
+        if enemy_type.sprite_path().is_some() {
+            entity.insert(AnimationTimer::new(3.0, 6));
+        }
     }
 }

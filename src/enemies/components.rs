@@ -79,7 +79,13 @@ impl EnemyType {
     }
 
     pub fn sprite_path(&self) -> Option<&'static str> {
-        None
+        match self {
+            EnemyType::Frontrunner          => Some("enemy_frontrunner.png"),
+            EnemyType::Backrunner           => Some("enemy_backrunner.png"),
+            EnemyType::SandwichBot          => Some("enemy_sandwich.png"),
+            EnemyType::JitLp                => Some("enemy_jitlp.png"),
+            EnemyType::GeneralizedFrontrunner | EnemyType::Liquidator => None,
+        }
     }
 }
 
