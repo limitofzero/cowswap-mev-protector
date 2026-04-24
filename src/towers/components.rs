@@ -109,6 +109,28 @@ impl TowerType {
 
     /// First atlas index for this tower's 6-frame animation row in cowswap_towers_anim.png.
     pub fn anim_base(&self) -> usize { self.atlas_index() * 6 }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            TowerType::CoWMatcher =>
+                "Finds matching orders and\ngrants MEV immunity for 6s.",
+            TowerType::BatchAuctioneer =>
+                "Batches nearby txs together.\nEach extra tx dilutes enemy drain.",
+            TowerType::Solver =>
+                "Fires projectiles at bots\nto reduce their HP.",
+            TowerType::SlippageGuard =>
+                "Slows enemies inside its range\ndown to 35% movement speed.",
+            TowerType::DarkPoolNode =>
+                "Hides txs from bots with a\ndark pool shield for 4s.",
+        }
+    }
+
+    pub fn stats_line(&self) -> String {
+        format!(
+            "Range {:.0}  CD {:.1}s  Cost {:.0}c",
+            self.range(), self.cooldown_secs(), self.cost()
+        )
+    }
 }
 
 /// Marks the range fill/border children — hidden unless the tower is hovered.

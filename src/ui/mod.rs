@@ -1,9 +1,12 @@
 use bevy::prelude::*;
+use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::asset::RenderAssetUsages;
+use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
 
 use crate::{
     game::GameState,
     resources::{GameEconomy, GameScore, PlacementMode, COW_USD_RATE},
-    towers::{TowerShopButton, TowerType},
+    towers::{Tower, TowerShopButton, TowerType},
 };
 
 pub struct UiPlugin;
@@ -32,6 +35,11 @@ const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 #[derive(Component)] pub struct StatText(StatKind);
 #[derive(Component)] pub struct ShopBtn { tower: TowerType }
 #[derive(Component)] pub struct RemoveBtn;
+#[derive(Component)] struct TooltipPanel;
+#[derive(Component)] struct TooltipContent;
+
+const TOOLTIP_W: f32 = 220.0;
+const TOOLTIP_H: f32 = 82.0;
 
 #[derive(Clone, Copy)]
 pub enum StatKind { Settled, Protected, Extracted, Balance }
@@ -41,13 +49,18 @@ impl Plugin for UiPlugin {
         app.add_systems(OnEnter(GameState::Playing), setup_world_ui)
             .add_systems(
                 Update,
-                (reposition_ui, update_stats, handle_shop_click)
+                (reposition_ui, update_stats, handle_shop_click, update_tooltip)
                     .run_if(in_state(GameState::Playing)),
             );
     }
 }
 
-fn setup_world_ui(mut commands: Commands, tower_assets: Res<crate::towers::TowerAssets>) {
+fn setup_world_ui(
+    mut commands: Commands,
+    tower_assets: Res<crate::towers::TowerAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
     // ── top bar background ────────────────────────────────────────────
     commands.spawn((
         Sprite {
@@ -177,6 +190,44 @@ fn setup_world_ui(mut commands: Commands, tower_assets: Res<crate::towers::Tower
         ));
     });
 
+    // Tooltip panel — transparent Sprite for visibility propagation; mesh children for visuals
+    const CR: f32 = 7.0; // corner radius
+    let border_mesh = meshes.add(make_rounded_rect(TOOLTIP_W, TOOLTIP_H, CR, 8));
+    let fill_mesh   = meshes.add(make_rounded_rect(TOOLTIP_W - 4.0, TOOLTIP_H - 4.0, CR - 1.0, 8));
+    commands.spawn((
+        Sprite { color: Color::NONE, custom_size: Some(Vec2::new(TOOLTIP_W, TOOLTIP_H)), ..default() },
+        Transform::from_xyz(0.0, -9999.0, 88.0),
+        Visibility::Hidden,
+        TooltipPanel,
+        Name::new("Tooltip"),
+    )).with_children(|p| {
+        p.spawn((
+            Mesh2d(border_mesh),
+            MeshMaterial2d(materials.add(ColorMaterial {
+                color: Color::srgba(0.50, 0.35, 0.88, 0.95),
+                alpha_mode: AlphaMode2d::Blend,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, 0.0, -0.05),
+        ));
+        p.spawn((
+            Mesh2d(fill_mesh),
+            MeshMaterial2d(materials.add(ColorMaterial {
+                color: Color::srgba(0.04, 0.02, 0.18, 0.97),
+                alpha_mode: AlphaMode2d::Blend,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        p.spawn((
+            Text2d::new(""),
+            TextFont { font_size: 10.0, ..default() },
+            TextColor(Color::srgb(0.90, 0.90, 0.90)),
+            Transform::from_xyz(0.0, 0.0, 0.5),
+            TooltipContent,
+        ));
+    });
+
     // Cancel hint — right of the last button
     let last_btn_x = btn_x(TOTAL_BTN_COUNT - 1);
     commands.spawn((
@@ -270,6 +321,109 @@ pub fn handle_shop_click(
 
     // Click on bar but not any button — cancel current mode
     *placement_mode = PlacementMode::Idle;
+}
+
+fn update_tooltip(
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    tower_q: Query<(&Tower, &Transform), Without<TooltipPanel>>,
+    btn_q: Query<(&ShopBtn, &Transform), Without<TooltipPanel>>,
+    mut panel_q: Query<(&mut Transform, &mut Visibility), With<TooltipPanel>>,
+    mut content_q: Query<&mut Text2d, With<TooltipContent>>,
+) {
+    let Ok(win) = windows.single() else { return };
+    let Ok((cam, cam_t)) = camera_q.single() else { return };
+    let Ok((mut panel_t, mut panel_vis)) = panel_q.single_mut() else { return };
+
+    let Some(cursor) = win.cursor_position()
+        .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
+    else {
+        *panel_vis = Visibility::Hidden;
+        return;
+    };
+
+    let half_w = win.width()  * 0.5;
+    let half_h = win.height() * 0.5;
+    let bot_y  = -half_h + BAR_H * 0.5;
+
+    let tower_hit = tower_q.iter()
+        .find(|(_, t)| t.translation.truncate().distance(cursor) < 42.0)
+        .map(|(tw, t)| (tw.tower_type.clone(), t.translation.truncate()));
+
+    let btn_hit = btn_q.iter()
+        .find(|(_, t)| {
+            (cursor.x - t.translation.x).abs() <= BTN_W * 0.5
+                && (cursor.y - bot_y).abs() <= BAR_H * 0.5 + 4.0
+        })
+        .map(|(btn, t)| (btn.tower.clone(), Vec2::new(t.translation.x, bot_y)));
+
+    let Some((tower_type, anchor)) = tower_hit.or(btn_hit) else {
+        *panel_vis = Visibility::Hidden;
+        return;
+    };
+
+    // Buttons sit on the bottom bar; towers are mid-screen sprites (110 px tall, half = 55).
+    let v_offset = if (anchor.y - bot_y).abs() < BAR_H {
+        BAR_H * 0.5 + 6.0 + TOOLTIP_H * 0.5   // just above the bar
+    } else {
+        55.0 + 6.0 + TOOLTIP_H * 0.5           // just above the tower sprite
+    };
+    let tx = anchor.x.clamp(-half_w + TOOLTIP_W * 0.5 + 4.0, half_w - TOOLTIP_W * 0.5 - 4.0);
+    let ty = (anchor.y + v_offset)
+        .clamp(-half_h + TOOLTIP_H * 0.5 + 4.0, half_h - TOOLTIP_H * 0.5 - 4.0);
+    panel_t.translation.x = tx;
+    panel_t.translation.y = ty;
+    *panel_vis = Visibility::Visible;
+
+    if let Ok(mut text) = content_q.single_mut() {
+        text.0 = format!(
+            "{}\n{}\n{}",
+            tower_type.label(),
+            tower_type.description(),
+            tower_type.stats_line(),
+        );
+    }
+}
+
+fn make_rounded_rect(width: f32, height: f32, radius: f32, steps: u32) -> Mesh {
+    use std::f32::consts::FRAC_PI_2;
+    let hw = width * 0.5;
+    let hh = height * 0.5;
+    let r = radius.min(hw).min(hh);
+    // (corner_center_x, corner_center_y, start_angle)
+    let corners: [(f32, f32, f32); 4] = [
+        ( hw - r,  hh - r, 0.0),            // top-right
+        (-hw + r,  hh - r, FRAC_PI_2),      // top-left
+        (-hw + r, -hh + r, FRAC_PI_2 * 2.0), // bottom-left
+        ( hw - r, -hh + r, FRAC_PI_2 * 3.0), // bottom-right
+    ];
+    let mut positions: Vec<[f32; 3]> = vec![[0.0, 0.0, 0.0]];
+    let mut indices: Vec<u32> = Vec::new();
+    for (cx, cy, start) in corners {
+        let base = positions.len() as u32;
+        for i in 0..=steps {
+            let a = start + (i as f32 / steps as f32) * FRAC_PI_2;
+            positions.push([cx + r * a.cos(), cy + r * a.sin(), 0.0]);
+        }
+        for i in 0..steps {
+            indices.extend_from_slice(&[0, base + i, base + i + 1]);
+        }
+    }
+    // Bridge triangles between consecutive corners
+    let n = steps + 1;
+    for c in 0..4u32 {
+        let next = (c + 1) % 4;
+        let last  = 1 + c * n + steps;
+        let first = 1 + next * n;
+        indices.extend_from_slice(&[0, last, first]);
+    }
+    let normals = vec![[0.0_f32, 0.0, 1.0]; positions.len()];
+    let uvs     = vec![[0.0_f32, 0.0]; positions.len()];
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_indices(Indices::U32(indices))
 }
 
 fn fmt_usd(usd: f32) -> String {
