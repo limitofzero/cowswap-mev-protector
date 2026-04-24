@@ -26,6 +26,7 @@ impl Plugin for EnemyPlugin {
                     systems::extract_value,
                     systems::tick_enemy_slow,
                     systems::check_enemy_deaths,
+                    systems::update_enemy_hp_bars,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

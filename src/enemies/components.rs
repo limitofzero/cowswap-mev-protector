@@ -107,13 +107,17 @@ impl Enemy {
     }
 }
 
+/// Marker for the filled portion of an enemy's HP bar (child entity).
+#[derive(Component)]
+pub struct EnemyHpBarFg;
+
 /// Shared sprite atlas handle for enemy sprites.
 #[derive(Resource, Default)]
 pub struct EnemyAssets {
     pub layout: Option<Handle<TextureAtlasLayout>>,
 }
 
-// ─── Wave system ──────────────────────────────────────────────────────────────
+// ─── Wave system 
 
 #[derive(PartialEq, Eq)]
 pub enum WaveState {

@@ -2,7 +2,11 @@ use bevy::prelude::*;
 
 use crate::{towers::AnimationTimer, transactions::Transaction};
 
-use super::components::{Enemy, EnemyAssets, EnemyType, WaveManager, WaveState};
+use super::components::{Enemy, EnemyAssets, EnemyHpBarFg, EnemyType, WaveManager, WaveState};
+
+const BAR_W: f32 = 40.0;
+const BAR_H: f32 = 5.0;
+const BAR_Y: f32 = 30.0;
 
 /// Phase 1 — find the nearest non-immune transaction for each enemy (no range limit).
 pub fn find_enemy_targets(
@@ -66,8 +70,39 @@ pub fn tick_enemy_slow(mut query: Query<&mut Enemy>, time: Res<Time>) {
 pub fn check_enemy_deaths(mut commands: Commands, query: Query<(Entity, &Enemy)>) {
     for (entity, enemy) in &query {
         if enemy.hp <= 0.0 {
+            commands.entity(entity).despawn_related::<Children>();
             commands.entity(entity).despawn();
         }
+    }
+}
+
+/// Update HP bar width and color each frame to reflect current health.
+pub fn update_enemy_hp_bars(
+    enemy_q: Query<(&Enemy, &Children)>,
+    mut bar_q: Query<(&mut Sprite, &mut Transform), With<EnemyHpBarFg>>,
+) {
+    for (enemy, children) in &enemy_q {
+        let ratio = (enemy.hp / enemy.max_hp).clamp(0.0, 1.0);
+        for &child in children {
+            let Ok((mut sprite, mut t)) = bar_q.get_mut(child) else { continue };
+            let new_w = BAR_W * ratio;
+            sprite.custom_size = Some(Vec2::new(new_w, BAR_H));
+            // Anchor bar to the left edge of the background bar
+            t.translation.x = -BAR_W * 0.5 + new_w * 0.5;
+            sprite.color = hp_color(ratio);
+        }
+    }
+}
+
+fn hp_color(ratio: f32) -> Color {
+    if ratio > 0.5 {
+        // green → yellow
+        let t = (1.0 - ratio) * 2.0;
+        Color::srgb(t, 1.0, 0.0)
+    } else {
+        // yellow → red
+        let t = ratio * 2.0;
+        Color::srgb(1.0, t, 0.0)
     }
 }
 
@@ -114,7 +149,6 @@ pub fn tick_waves(
         WaveState::WaitForClear => {
             if enemy_q.is_empty() {
                 waves.state = WaveState::Countdown;
-                // Shorten inter-wave pause after the first wave
                 let pause = if waves.wave >= 3 { 6.0 } else { 8.0 };
                 waves.between_timer = Timer::from_seconds(pause, TimerMode::Once);
             }
@@ -142,5 +176,25 @@ fn spawn_enemy(
         Enemy::new(enemy_type.clone()),
         AnimationTimer::new(3.0, 6),
         Name::new(format!("{enemy_type:?}")),
-    ));
+    )).with_children(|p| {
+        // Background bar (dark, full width)
+        p.spawn((
+            Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, 0.7),
+                custom_size: Some(Vec2::new(BAR_W, BAR_H)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, BAR_Y, 0.1),
+        ));
+        // Foreground bar (colored, shrinks with HP)
+        p.spawn((
+            Sprite {
+                color: Color::srgb(0.2, 1.0, 0.0),
+                custom_size: Some(Vec2::new(BAR_W, BAR_H)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, BAR_Y, 0.2),
+            EnemyHpBarFg,
+        ));
+    });
 }
