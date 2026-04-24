@@ -44,12 +44,13 @@ impl Default for WaveState {
     }
 }
 
-/// Whether the player is currently placing a tower.
+/// Whether the player is currently placing or removing a tower.
 #[derive(Resource, Default, PartialEq)]
 pub enum PlacementMode {
     #[default]
     Idle,
     Placing(TowerType),
+    Removing,
 }
 
 pub struct GameResourcesPlugin;

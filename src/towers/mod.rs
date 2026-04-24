@@ -21,7 +21,9 @@ impl Plugin for TowerPlugin {
             (
                 systems::manage_ghost_tower,
                 systems::update_ghost_tower,
+                systems::update_delete_cursor,
                 systems::handle_placement_click,
+                systems::handle_remove_tower,
                 systems::tick_towers,
                 systems::move_projectiles,
                 systems::animate_sprites,

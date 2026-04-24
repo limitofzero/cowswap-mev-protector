@@ -137,14 +137,17 @@ fn hp_color(ratio: f32) -> Color {
     }
 }
 
-/// Pre-load the shared enemy atlas layout.
+/// Pre-load the shared enemy atlas layout and all enemy textures.
 pub fn setup_enemy_assets(
+    asset_server: Res<AssetServer>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut enemy_assets: ResMut<EnemyAssets>,
 ) {
-    enemy_assets.layout = Some(
-        layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None))
-    );
+    enemy_assets.layout      = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None)));
+    enemy_assets.frontrunner = Some(asset_server.load("enemy_frontrunner.png"));
+    enemy_assets.backrunner  = Some(asset_server.load("enemy_backrunner.png"));
+    enemy_assets.sandwich    = Some(asset_server.load("enemy_sandwich.png"));
+    enemy_assets.jitlp       = Some(asset_server.load("enemy_jitlp.png"));
 }
 
 /// Drive the wave state machine: countdown → spawn one-by-one → wait for clear → repeat.
@@ -152,7 +155,6 @@ pub fn tick_waves(
     mut commands: Commands,
     mut waves: ResMut<WaveManager>,
     enemy_assets: Res<EnemyAssets>,
-    asset_server: Res<AssetServer>,
     enemy_q: Query<&Enemy>,
     time: Res<Time>,
 ) {
@@ -170,7 +172,7 @@ pub fn tick_waves(
             if waves.spawn_timer.just_finished() {
                 if let Some(enemy_type) = waves.pending.pop_front() {
                     let pos = waves.rand_spawn_pos();
-                    spawn_enemy(&mut commands, &asset_server, &enemy_assets, enemy_type, pos);
+                    spawn_enemy(&mut commands, &enemy_assets, enemy_type, pos);
                 }
                 if waves.pending.is_empty() {
                     waves.state = WaveState::WaitForClear;
@@ -189,16 +191,15 @@ pub fn tick_waves(
 
 fn spawn_enemy(
     commands: &mut Commands,
-    asset_server: &AssetServer,
     enemy_assets: &EnemyAssets,
     enemy_type: EnemyType,
     pos: Vec2,
 ) {
-    let Some(layout) = enemy_assets.layout.clone() else { return };
+    let (Some(layout), Some(image)) = (enemy_assets.layout.clone(), enemy_assets.texture(&enemy_type)) else { return };
     let size = enemy_type.size();
     commands.spawn((
         Sprite {
-            image: asset_server.load(enemy_type.sprite_path()),
+            image,
             texture_atlas: Some(TextureAtlas { layout, index: 0 }),
             custom_size: Some(Vec2::splat(size)),
             ..default()

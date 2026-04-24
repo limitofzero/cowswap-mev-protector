@@ -7,7 +7,9 @@ use crate::{
     transactions::{components::ImmunitySource, Transaction},
 };
 
-use super::components::{AnimationTimer, GhostTower, Projectile, Tower, TowerAssets, TowerRangeVisual, TowerType};
+const REMOVE_COST: f32 = 10.0;
+
+use super::components::{AnimationTimer, DeleteCursor, GhostTower, Projectile, Tower, TowerAssets, TowerRangeVisual, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
@@ -171,6 +173,7 @@ pub fn spawn_initial_towers(
     tower_assets.anim_sheet   = Some(asset_server.load("towers/cowswap_towers_anim.png"));
     tower_assets.ghost_sheet  = Some(asset_server.load("towers/cowswap_towers_ghost.png"));
     tower_assets.icon_sheet   = Some(asset_server.load("towers/cowswap_towers_icons.png"));
+    tower_assets.delete_icon  = Some(asset_server.load("towers/tower_delete.png"));
 
     for (tower_type, pos) in layout {
         let color = tower_type.color();
@@ -219,11 +222,14 @@ pub fn manage_ghost_tower(
     mut commands: Commands,
     placement_mode: Res<PlacementMode>,
     ghost_q: Query<(Entity, &GhostTower)>,
+    delete_cursor_q: Query<Entity, With<DeleteCursor>>,
     tower_assets: Res<TowerAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     if !placement_mode.is_changed() { return; }
+    // Always despawn whichever cursor is active before potentially spawning a new one
+    for e in &delete_cursor_q { commands.entity(e).despawn(); }
     match &*placement_mode {
         PlacementMode::Placing(tower_type) => {
             for (e, _) in &ghost_q { commands.entity(e).despawn(); }
@@ -245,6 +251,22 @@ pub fn manage_ghost_tower(
             )).with_children(|p| {
                 spawn_ghost_range_visuals(p, &mut meshes, &mut materials, range, c);
             });
+        }
+        PlacementMode::Removing => {
+            for (e, _) in &ghost_q { commands.entity(e).despawn(); }
+            if let Some(icon) = tower_assets.delete_icon.clone() {
+                commands.spawn((
+                    Sprite {
+                        image: icon,
+                        custom_size: Some(Vec2::new(37.0, 55.0)),
+                        color: Color::srgba(1.0, 0.4, 0.4, 0.85),
+                        ..default()
+                    },
+                    Transform::from_xyz(0.0, -9999.0, 20.0),
+                    DeleteCursor,
+                    Name::new("DeleteCursor"),
+                ));
+            }
         }
         PlacementMode::Idle => {
             for (e, _) in &ghost_q { commands.entity(e).despawn(); }
@@ -277,6 +299,20 @@ pub fn update_ghost_tower(
     } else {
         Color::srgba(1.0, 0.45, 0.45, a)
     };
+}
+
+/// Move the delete cursor icon to follow the mouse during remove mode.
+pub fn update_delete_cursor(
+    mut cursor_q: Query<&mut Transform, With<DeleteCursor>>,
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+) {
+    let Ok(mut t) = cursor_q.single_mut() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((cam, cam_t)) = camera_q.single() else { return };
+    let Some(pos) = cursor_world_pos(window, cam, cam_t) else { return };
+    t.translation.x = pos.x;
+    t.translation.y = pos.y;
 }
 
 /// Left-click to place, right-click / Escape to cancel.
@@ -400,6 +436,44 @@ fn spawn_ghost_range_visuals(
         })),
         Transform::from_xyz(0.0, 0.0, -9.85),
     ));
+}
+
+/// When in Removing mode: left-click a tower to demolish it for REMOVE_COST COW.
+/// RMB / Escape cancels the mode.
+pub fn handle_remove_tower(
+    mut commands: Commands,
+    mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut placement_mode: ResMut<PlacementMode>,
+    tower_q: Query<(Entity, &Transform), With<Tower>>,
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut economy: ResMut<GameEconomy>,
+) {
+    if *placement_mode != PlacementMode::Removing { return; }
+
+    if mouse.just_pressed(MouseButton::Right) || keys.just_pressed(KeyCode::Escape) {
+        *placement_mode = PlacementMode::Idle;
+        return;
+    }
+
+    if !mouse.just_pressed(MouseButton::Left) { return; }
+
+    let Ok(window) = windows.single() else { return };
+    let Ok((cam, cam_t)) = camera_q.single() else { return };
+    let Some(pos) = cursor_world_pos(window, cam, cam_t) else { return };
+
+    for (entity, transform) in &tower_q {
+        if transform.translation.truncate().distance(pos) < 42.0 {
+            if economy.balance >= REMOVE_COST {
+                economy.balance -= REMOVE_COST;
+                commands.entity(entity).despawn_related::<Children>();
+                commands.entity(entity).despawn();
+            }
+            *placement_mode = PlacementMode::Idle;
+            return;
+        }
+    }
 }
 
 /// Show range circles only for the tower the cursor is currently over.

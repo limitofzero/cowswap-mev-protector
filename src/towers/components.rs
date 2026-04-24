@@ -119,6 +119,10 @@ pub struct TowerRangeVisual;
 #[derive(Component)]
 pub struct GhostTower(pub TowerType);
 
+/// Marks the delete-icon sprite that follows the cursor during remove mode.
+#[derive(Component)]
+pub struct DeleteCursor;
+
 /// Attached to each tower shop button in the HUD.
 #[derive(Component)]
 pub struct TowerShopButton(pub TowerType);
@@ -143,6 +147,8 @@ pub struct TowerAssets {
     pub anim_sheet: Option<Handle<Image>>,
     pub ghost_sheet: Option<Handle<Image>>,
     pub icon_sheet: Option<Handle<Image>>,
+    /// towers/tower_delete.png — icon for the remove button
+    pub delete_icon: Option<Handle<Image>>,
 }
 
 /// A placed defense tower.

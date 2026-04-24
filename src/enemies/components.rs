@@ -112,10 +112,25 @@ impl Enemy {
 #[derive(Component)]
 pub struct EnemyHpBarFg;
 
-/// Shared sprite atlas handle for enemy sprites.
+/// Pre-loaded handles for all enemy sprites and the shared atlas layout.
 #[derive(Resource, Default)]
 pub struct EnemyAssets {
     pub layout: Option<Handle<TextureAtlasLayout>>,
+    pub frontrunner: Option<Handle<Image>>,
+    pub backrunner:  Option<Handle<Image>>,
+    pub sandwich:    Option<Handle<Image>>,
+    pub jitlp:       Option<Handle<Image>>,
+}
+
+impl EnemyAssets {
+    pub fn texture(&self, enemy_type: &EnemyType) -> Option<Handle<Image>> {
+        match enemy_type {
+            EnemyType::Frontrunner => self.frontrunner.clone(),
+            EnemyType::Backrunner  => self.backrunner.clone(),
+            EnemyType::SandwichBot => self.sandwich.clone(),
+            EnemyType::JitLp       => self.jitlp.clone(),
+        }
+    }
 }
 
 // ─── Wave system 

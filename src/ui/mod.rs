@@ -2,7 +2,6 @@ use bevy::prelude::*;
 
 use crate::{
     game::GameState,
-    mempool::MempoolPath,
     resources::{GameEconomy, GameScore, PlacementMode, COW_USD_RATE},
     towers::{TowerShopButton, TowerType},
 };
@@ -24,11 +23,15 @@ const SHOP_TOWERS: [TowerType; 5] = [
     TowerType::SlippageGuard,
     TowerType::DarkPoolNode,
 ];
+const REMOVE_COST: f32 = 10.0;
+// Total buttons = 5 tower + 1 remove; used to center the row.
+const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 
 #[derive(Component)] struct TopBar;
 #[derive(Component)] struct BottomBar;
 #[derive(Component)] pub struct StatText(StatKind);
 #[derive(Component)] pub struct ShopBtn { tower: TowerType }
+#[derive(Component)] pub struct RemoveBtn;
 
 #[derive(Clone, Copy)]
 pub enum StatKind { Settled, Protected, Extracted, Balance }
@@ -141,8 +144,41 @@ fn setup_world_ui(mut commands: Commands, tower_assets: Res<crate::towers::Tower
         });
     }
 
+    // Remove button (index = last slot) — same layout as tower buttons
+    let remove_x = btn_x(SHOP_TOWERS.len());
+    let label_local_x = -BTN_W * 0.5 + BTN_ICON_ZONE + (BTN_W - BTN_ICON_ZONE) * 0.5;
+    let mut remove_btn = commands.spawn((
+        Sprite {
+            color: Color::srgba(0.55, 0.08, 0.08, 0.95),
+            custom_size: Some(Vec2::new(BTN_W, BTN_H)),
+            ..default()
+        },
+        Transform::from_xyz(remove_x, 0.0, BAR_Z + 1.0),
+        BottomBar,
+        RemoveBtn,
+        Name::new("RemoveBtn"),
+    ));
+    remove_btn.with_children(|p| {
+        if let Some(icon) = tower_assets.delete_icon.clone() {
+            p.spawn((
+                Sprite {
+                    image: icon,
+                    custom_size: Some(Vec2::new(BTN_ICON_W, BTN_ICON_H)),
+                    ..default()
+                },
+                Transform::from_xyz(-BTN_W * 0.5 + BTN_ICON_ZONE * 0.5, 0.0, 1.0),
+            ));
+        }
+        p.spawn((
+            Text2d::new(format!("Remove -{:.0}c", REMOVE_COST)),
+            TextFont { font_size: 10.0, ..default() },
+            TextColor(Color::srgb(1.0, 0.65, 0.65)),
+            Transform::from_xyz(label_local_x, 0.0, 1.0),
+        ));
+    });
+
     // Cancel hint — right of the last button
-    let last_btn_x = btn_x(SHOP_TOWERS.len() - 1);
+    let last_btn_x = btn_x(TOTAL_BTN_COUNT - 1);
     commands.spawn((
         Text2d::new("RMB/Esc: cancel"),
         TextFont { font_size: 10.0, ..default() },
@@ -153,7 +189,7 @@ fn setup_world_ui(mut commands: Commands, tower_assets: Res<crate::towers::Tower
 }
 
 fn btn_x(idx: usize) -> f32 {
-    let n = SHOP_TOWERS.len() as f32;
+    let n = TOTAL_BTN_COUNT as f32;
     let total = n * BTN_W + (n - 1.0) * BTN_GAP;
     -total * 0.5 + idx as f32 * (BTN_W + BTN_GAP) + BTN_W * 0.5
 }
@@ -189,18 +225,17 @@ fn update_stats(
     }
 }
 
-/// Click on a shop button in world space → enter placement mode.
+/// Click on a shop button in world space → enter placement/remove mode.
 pub fn handle_shop_click(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     btn_q: Query<(&ShopBtn, &Transform)>,
+    remove_btn_q: Query<&Transform, With<RemoveBtn>>,
     mut placement_mode: ResMut<PlacementMode>,
     economy: Res<GameEconomy>,
-    path: Res<MempoolPath>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) { return; }
-    // Only handle clicks inside the bottom bar area (to avoid conflict with placement)
     let Ok(win) = windows.single() else { return };
     let Ok((cam, cam_t)) = camera_q.single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
@@ -209,12 +244,11 @@ pub fn handle_shop_click(
     let half_h = win.height() * 0.5;
     let bot_y = -half_h + BAR_H * 0.5;
 
-    // Ignore click if not near the bottom bar
     if (world_pos.y - bot_y).abs() > BAR_H * 0.5 + 4.0 { return; }
 
+    // Tower buttons
     for (btn, btn_t) in &btn_q {
-        let bx = btn_t.translation.x;
-        if (world_pos.x - bx).abs() <= BTN_W * 0.5 {
+        if (world_pos.x - btn_t.translation.x).abs() <= BTN_W * 0.5 {
             if economy.balance >= btn.tower.cost() {
                 *placement_mode = PlacementMode::Placing(btn.tower.clone());
             }
@@ -222,11 +256,20 @@ pub fn handle_shop_click(
         }
     }
 
-    // Also cancel placement if clicking bottom bar but not on a button
-    if let PlacementMode::Placing(_) = *placement_mode {
-        *placement_mode = PlacementMode::Idle;
+    // Remove button — toggle
+    if let Ok(t) = remove_btn_q.single() {
+        if (world_pos.x - t.translation.x).abs() <= BTN_W * 0.5 {
+            *placement_mode = if *placement_mode == PlacementMode::Removing {
+                PlacementMode::Idle
+            } else {
+                PlacementMode::Removing
+            };
+            return;
+        }
     }
-    let _ = path; // suppress unused warning
+
+    // Click on bar but not any button — cancel current mode
+    *placement_mode = PlacementMode::Idle;
 }
 
 fn fmt_usd(usd: f32) -> String {
