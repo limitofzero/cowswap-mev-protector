@@ -245,20 +245,32 @@ pub fn manage_ghost_tower(
     mut commands: Commands,
     placement_mode: Res<PlacementMode>,
     ghost_q: Query<(Entity, &GhostTower)>,
+    asset_server: Res<AssetServer>,
+    tower_assets: Res<TowerAssets>,
 ) {
     if !placement_mode.is_changed() { return; }
     match &*placement_mode {
         PlacementMode::Placing(tower_type) => {
-            // Despawn old ghost (different type) if present
             for (e, _) in &ghost_q { commands.entity(e).despawn(); }
-            let c = tower_type.color().to_srgba();
-            commands.spawn((
+            let sprite = if let (Some(path), Some(layout)) = (tower_type.sprite_path(), &tower_assets.layout) {
                 Sprite {
-                    color: Color::srgba(c.red, c.green, c.blue, 0.55),
+                    image: asset_server.load(path),
+                    texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
+                    custom_size: Some(Vec2::new(84.0, 122.0)),
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.65),
+                    ..default()
+                }
+            } else {
+                let c = tower_type.color().to_srgba();
+                Sprite {
+                    color: Color::srgba(c.red, c.green, c.blue, 0.65),
                     custom_size: Some(Vec2::splat(28.0)),
                     ..default()
-                },
-                Transform::from_xyz(0.0, -9999.0, 20.0), // off-screen until cursor moves
+                }
+            };
+            commands.spawn((
+                sprite,
+                Transform::from_xyz(0.0, -9999.0, 20.0),
                 GhostTower(tower_type.clone()),
                 Name::new("GhostTower"),
             ));
@@ -290,9 +302,9 @@ pub fn update_ghost_tower(
     let valid = is_valid_placement(pos, &path, &tower_q);
     let a = ghost_s.color.alpha();
     ghost_s.color = if valid {
-        Color::srgba(0.3, 1.0, 0.3, a)
+        Color::srgba(0.75, 1.0, 0.75, a)
     } else {
-        Color::srgba(1.0, 0.25, 0.25, a)
+        Color::srgba(1.0, 0.45, 0.45, a)
     };
 }
 
@@ -321,6 +333,9 @@ pub fn handle_placement_click(
     }
 
     if !mouse.just_pressed(MouseButton::Left) { return; }
+
+    // The same click that activated placement mode must not also place a tower
+    if placement_mode.is_changed() { return; }
 
     // Don't place when clicking a UI button
     if ui_buttons.iter().any(|i| *i == Interaction::Pressed) { return; }
