@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CowSwap Tower Sprites v10</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#08060f; color:#f0f0ff; font-family:monospace; padding:24px; }
+  h1 { color:#a78bfa; font-size:12px; letter-spacing:3px; margin-bottom:4px; }
+  .sub { font-size:9px; color:#444; margin-bottom:20px; letter-spacing:1px; }
+  .towers-grid { display:flex; flex-wrap:wrap; gap:20px; margin-bottom:32px; }
+  .card { background:#0d0a22; border:1px solid #2d1b60; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .card h3 { font-size:10px; letter-spacing:2px; }
+  .variants { display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; justify-content:center; }
+  .variant { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .variant-label { font-size:8px; color:#555; letter-spacing:1px; text-align:center; line-height:1.5; }
+  canvas { image-rendering:pixelated; border-radius:4px; }
+  .checker {
+    background-image: linear-gradient(45deg,#1a1a2e 25%,transparent 25%),linear-gradient(-45deg,#1a1a2e 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1a1a2e 75%),linear-gradient(-45deg,transparent 75%,#1a1a2e 75%);
+    background-size:8px 8px; background-position:0 0,0 4px,4px -4px,-4px 0; background-color:#0d0d1f;
+  }
+  button { background:#1a0a3a; color:#a78bfa; border:1px solid #4c1d95; padding:5px 12px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:9px; letter-spacing:1px; width:100%; }
+  button:hover { background:#2d1b60; }
+  .dl-all { background:#2d1265; color:#e0d0ff; border:1px solid #7c3aed; padding:9px 24px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:10px; letter-spacing:2px; margin-bottom:22px; display:inline-block; }
+  .dl-all:hover { background:#4c1d95; }
+  .section-title { font-size:9px; color:#f59e0b; letter-spacing:3px; border-bottom:1px solid #2d1b60; padding-bottom:6px; margin-bottom:14px; }
+  .cdinfo { font-size:8px; color:#888; text-align:center; }
+</style>
+</head>
+<body>
+<h1>⚔ COWSWAP TOWER SPRITES v10</h1>
+<p class="sub">6 frames · dots = cooldown indicator · narrower body · no bar · transparent</p>
+<button class="dl-all" onclick="downloadAll()">⬇ DOWNLOAD ALL</button>
+<div id="root"></div>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const PAD    = 16;
+const FRAMES = 6;   // 0=empty, 1..4=filling, 5=ready+flash
+
+const IW = 52, IH = 78;
+const CW = IW + PAD*2;   // 84
+const CH = IH + PAD*2;   // 110
+
+// Body layout at scale=1:
+//   antTip  y=2
+//   antBase y=14  (= by)
+//   band    y=14..30  (bandH=16)
+//   body    y=14..78  (bh=64)
+//   bar zone: y=(14+16+4)..(14+64-4) = y=34..74, height=40
+//             i.e. barY = by+bandH+4, barH = bh-bandH-8
+//   bar sits fully inside body, 4px margin from band bottom and body bottom
+
+const UI_PAD = 10;
+const UI_CW  = Math.round(IW*0.5) + UI_PAD*2;   // 46
+const UI_CH  = Math.round(IH*0.5) + UI_PAD*2;   // 59
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const make = (w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c;};
+const addChecker=c=>{c.className='checker';return c;};
+const dl=(canvas,name)=>{const a=document.createElement('a');a.download=name+'.png';a.href=canvas.toDataURL('image/png');a.click();};
+
+function rrect(ctx,x,y,w,h,r,fill,stroke,sw=1.5){
+  ctx.beginPath();ctx.roundRect(x,y,w,h,r);
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw;ctx.stroke();}
+}
+function circ(ctx,x,y,r,fill){
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
+}
+function txt(ctx,t,x,y,size,color){
+  ctx.fillStyle=color;
+  ctx.font=`bold ${size}px "Courier New",monospace`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(t,x,y);
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+}
+
+// ─── TOWER DEFINITIONS ───────────────────────────────────────────────────────
+const towers=[
+  {key:'tower_cow',abbr:'CoW',color:'#10b981',colorL:'#6ee7b7',bodyC:'#031a0f',bordC:'#10b981',cd:'3.5s',cdDesc:'2 txs · 6s immunity'},
+  {key:'tower_ba', abbr:'BA', color:'#8b5cf6',colorL:'#c4b5fd',bodyC:'#1e1040',bordC:'#8b5cf6',cd:'2.5s',cdDesc:'batch → 1/n damage'},
+  {key:'tower_slv',abbr:'SLV',color:'#f59e0b',colorL:'#fde68a',bodyC:'#1a1200',bordC:'#f59e0b',cd:'1.5s',cdDesc:'30dmg homing shot'},
+  {key:'tower_sg', abbr:'SG', color:'#ec4899',colorL:'#f9a8d4',bodyC:'#200830',bordC:'#ec4899',cd:'0.8s',cdDesc:'−65% speed · 3s'},
+  {key:'tower_dp', abbr:'DP', color:'#3b82f6',colorL:'#93c5fd',bodyC:'#001525',bordC:'#3b82f6',cd:'10s', cdDesc:'4s full immunity'},
+];
+
+// ─── CORE DRAW ────────────────────────────────────────────────────────────────
+// frame 0: bar empty, antenna dim
+// frames 1-4: bar filling, antenna normal pulse baked at phase=(f/5)*2π
+// frame 5: bar full + flash, antenna bright
+function drawTowerInner(ctx,tower,scale,frame,ghost){
+  const s   = scale;
+  const cx  = (IW*s)/2;
+  const bw  = Math.round(46*s);
+  const bh  = Math.round(64*s);
+  const bx  = Math.round((IW*s-bw)/2);
+  const antH  = Math.round(14*s);
+  const by    = antH;
+  const bandH = Math.round(16*s);
+  const br    = Math.round(8*s);
+  const poleW = Math.max(1,Math.round(3*s));
+  const antTip    = Math.round(2*s);
+  const antDotR   = Math.max(2,5*s);
+  const antCoreR  = Math.max(1,2.5*s);
+  const dotR      = Math.max(1.5,4*s);
+  const dotCoreR  = Math.max(1,2*s);
+  const dotSpacing = Math.round(15*s);
+
+  // Bar params from frame
+  const flash   = frame === FRAMES-1;                 // frame 5
+  // Antenna phase
+  const phase   = (frame/(FRAMES-1)) * Math.PI * 2;
+  const antAlpha = ghost ? 0.45
+                 : flash ? 1.0
+                 : 0.35 + 0.65*(0.5+0.5*Math.sin(phase));
+
+  const color  = ghost ? '#4488bb' : tower.color;
+  const colorL = ghost ? '#88bbdd' : tower.colorL;
+  const bodyC  = ghost ? '#0a1a2a' : tower.bodyC;
+  const bordC  = ghost ? '#2255aa' : tower.bordC;
+
+  if(ghost) ctx.globalAlpha = 0.55;
+
+  // ── ANTENNA POLE ──
+  ctx.strokeStyle = colorL; ctx.lineWidth = poleW;
+  ctx.beginPath(); ctx.moveTo(cx,by); ctx.lineTo(cx,antTip+antDotR+1); ctx.stroke();
+
+  // ── ANTENNA DOT (glow only on dot, PAD=16 absorbs blur=8) ──
+  ctx.globalAlpha = ghost ? 0.35 : antAlpha;
+  ctx.shadowColor = colorL;
+  ctx.shadowBlur  = ghost ? 0 : Math.round(8*s);
+  circ(ctx, cx, antTip, antDotR, colorL);
+  ctx.shadowBlur  = 0;
+  ctx.globalAlpha = ghost ? 0.22 : (antAlpha*0.9+0.1);
+  circ(ctx, cx, antTip, antCoreR, '#ffffff');
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+
+  // ── BODY ──
+  rrect(ctx, bx,by,bw,bh, br, bodyC, bordC, Math.max(1,2*s));
+
+  // Inner highlight top edge
+  ctx.globalAlpha = ghost ? 0.03 : 0.08;
+  rrect(ctx, bx+Math.round(4*s), by+Math.round(4*s), bw-Math.round(8*s), Math.round(8*s), [Math.round(4*s),Math.round(4*s),0,0], '#ffffff');
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+
+  // ── TOP BAND ──
+  if(flash && !ghost){ctx.shadowColor=tower.color;ctx.shadowBlur=Math.round(10*s);}
+  rrect(ctx, bx,by,bw,bandH, [br,br,0,0], color, bordC, Math.max(1,2*s));
+  ctx.shadowBlur=0;
+
+  // Band shine
+  ctx.globalAlpha = ghost ? 0.08 : (flash ? 0.55 : 0.28);
+  rrect(ctx, bx+Math.round(6*s), by+Math.round(4*s), bw-Math.round(22*s), Math.round(5*s), Math.round(2*s), '#ffffff');
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+
+  // ── ABBR TEXT ──
+  const fs = Math.max(6,Math.round((tower.abbr.length>2?14:18)*s));
+  if(flash && !ghost){ctx.shadowColor=colorL;ctx.shadowBlur=Math.round(5*s);}
+  // Shift abbr left to make room for bar
+  txt(ctx, tower.abbr, cx, by+bandH+(bh-bandH)/2, fs, colorL);
+  ctx.shadowBlur=0;
+
+  // ── DOTS = COOLDOWN INDICATOR ──
+  // 3 dots x 2 stages = 6 frames:
+  //   f0: all dim
+  //   f1: dot[0] half   f2: dot[0] full
+  //   f3: dot[1] half   f4: dot[1] full
+  //   f5: all full + flash (ready)
+  if(!ghost){
+    const totalDotsW = 2 * dotSpacing;
+    const dotStartX  = cx - totalDotsW/2;
+    const dotY = by + bh - Math.round(12*s);
+
+    [0,1,2].forEach(i => {
+      const dx = dotStartX + i * dotSpacing;
+      let fill = 0;
+      if(flash){
+        fill = 1;
+      } else {
+        const halfFrame = i*2 + 1;
+        const fullFrame = i*2 + 2;
+        if(frame >= fullFrame)      fill = 1.0;
+        else if(frame >= halfFrame) fill = 0.5;
+        else                        fill = 0;
+      }
+
+      // Track (always dim background)
+      ctx.globalAlpha = 0.18;
+      circ(ctx, dx, dotY, dotR, color);
+      ctx.globalAlpha = 1;
+
+      if(fill > 0){
+        const a = fill === 0.5 ? 0.5 : 1.0;
+        ctx.globalAlpha = a;
+        if(flash){ ctx.shadowColor=colorL; ctx.shadowBlur=Math.round(6*s); }
+        circ(ctx, dx, dotY, dotR, color);
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = a * 0.65;
+        circ(ctx, dx, dotY, dotCoreR, '#ffffff');
+        ctx.globalAlpha = 1;
+      }
+    });
+  }
+
+  // ── GHOST OVERLAY ──
+  if(ghost){
+    ctx.globalAlpha=0.18;
+    ctx.fillStyle='#3399ff';
+    ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,br); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+
+// ─── BUILDERS ────────────────────────────────────────────────────────────────
+function drawFrame(tower, frame){
+  const c=make(CW,CH); const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  ctx.save(); ctx.translate(PAD,PAD);
+  drawTowerInner(ctx,tower,1.0,frame,false);
+  ctx.restore(); return c;
+}
+function drawUI(tower){
+  const c=make(UI_CW,UI_CH); const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  ctx.save(); ctx.translate(UI_PAD,UI_PAD);
+  drawTowerInner(ctx,tower,0.5,FRAMES-1,false);  // show at full/ready state
+  ctx.restore(); return c;
+}
+function drawGhost(tower){
+  const c=make(CW,CH); const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  ctx.save(); ctx.translate(PAD,PAD);
+  drawTowerInner(ctx,tower,1.0,0,true);
+  ctx.restore(); return c;
+}
+function buildAnimSheet(tower){
+  const s=make(CW*FRAMES,CH); const ctx=s.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  for(let f=0;f<FRAMES;f++) ctx.drawImage(drawFrame(tower,f),f*CW,0);
+  return s;
+}
+
+// ─── UI CARDS ─────────────────────────────────────────────────────────────────
+const ANIM_DELAYS = [300, 220, 220, 220, 220, 500]; // ms per frame in live preview
+
+function buildCard(tower){
+  const card=document.createElement('div'); card.className='card';
+  const h3=document.createElement('h3'); h3.textContent=tower.abbr+' · '+tower.cd;
+  h3.style.color=tower.colorL; card.appendChild(h3);
+  const cdinfo=document.createElement('div'); cdinfo.className='cdinfo';
+  cdinfo.style.color=tower.colorL+'99'; cdinfo.textContent=tower.cdDesc; card.appendChild(cdinfo);
+
+  const variants=document.createElement('div'); variants.className='variants';
+
+  // ── ANIMATED ──
+  const animVar=document.createElement('div'); animVar.className='variant';
+
+  const sheet=buildAnimSheet(tower);
+  const sp=make(sheet.width,sheet.height); addChecker(sp);
+  sp.style.cssText='border:1px solid #2d1b60;border-radius:4px;max-width:400px;';
+  const sc=sp.getContext('2d'); sc.imageSmoothingEnabled=false; sc.drawImage(sheet,0,0);
+  animVar.appendChild(sp);
+
+  const anim=make(CW*2,CH*2); addChecker(anim);
+  anim.style.cssText='border:1px solid #3d2080;border-radius:4px;';
+  const ac=anim.getContext('2d'); ac.imageSmoothingEnabled=false;
+  let af=0;
+  function nextF(){
+    ac.clearRect(0,0,anim.width,anim.height);
+    ac.drawImage(drawFrame(tower,af),0,0,anim.width,anim.height);
+    const d=ANIM_DELAYS[af]; af=(af+1)%FRAMES; setTimeout(nextF,d);
+  }
+  nextF();
+  animVar.appendChild(anim);
+
+  const al=document.createElement('div'); al.className='variant-label';
+  al.innerHTML=`ANIMATED · ${CW*FRAMES}×${CH}<br>0=empty · 1-4=fill · 5=ready`;
+  animVar.appendChild(al);
+  const abtn=document.createElement('button'); abtn.textContent='⬇ _anim.png';
+  abtn.onclick=()=>dl(buildAnimSheet(tower),tower.key+'_anim');
+  animVar.appendChild(abtn);
+  variants.appendChild(animVar);
+
+  // ── UI ICON ──
+  const uiVar=document.createElement('div'); uiVar.className='variant';
+  const uiC=drawUI(tower);
+  const uiP=make(UI_CW*4,UI_CH*4); addChecker(uiP);
+  uiP.style.cssText='border:1px solid #2d1b60;border-radius:4px;';
+  const upc=uiP.getContext('2d'); upc.imageSmoothingEnabled=false;
+  upc.drawImage(uiC,0,0,uiP.width,uiP.height); uiVar.appendChild(uiP);
+  const ul=document.createElement('div'); ul.className='variant-label';
+  ul.textContent=`UI ICON · ${UI_CW}×${UI_CH}`; uiVar.appendChild(ul);
+  const ubtn=document.createElement('button'); ubtn.textContent='⬇ _icon.png';
+  ubtn.onclick=()=>dl(drawUI(tower),tower.key+'_icon');
+  uiVar.appendChild(ubtn); variants.appendChild(uiVar);
+
+  // ── GHOST ──
+  const ghVar=document.createElement('div'); ghVar.className='variant';
+  const ghC=drawGhost(tower);
+  const ghP=make(CW*2,CH*2); addChecker(ghP);
+  ghP.style.cssText='border:1px solid #1d4ed8;border-radius:4px;';
+  const ghpc=ghP.getContext('2d'); ghpc.imageSmoothingEnabled=false;
+  ghpc.drawImage(ghC,0,0,ghP.width,ghP.height); ghVar.appendChild(ghP);
+  const gl=document.createElement('div'); gl.className='variant-label';
+  gl.textContent=`GHOST · ${CW}×${CH}`; ghVar.appendChild(gl);
+  const gbtn=document.createElement('button'); gbtn.textContent='⬇ _ghost.png';
+  gbtn.onclick=()=>dl(drawGhost(tower),tower.key+'_ghost');
+  ghVar.appendChild(gbtn); variants.appendChild(ghVar);
+
+  card.appendChild(variants);
+  return card;
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+const root=document.getElementById('root');
+const sec=document.createElement('div'); sec.className='section-title';
+sec.textContent='TOWERS — 6 FRAMES · COOLDOWN BAR INSIDE BODY';
+root.appendChild(sec);
+
+const grid=document.createElement('div'); grid.className='towers-grid';
+towers.forEach(t=>grid.appendChild(buildCard(t)));
+root.appendChild(grid);
+
+// ── COMBINED ──
+const combSec=document.createElement('div'); combSec.className='section-title';
+combSec.style.marginTop='8px'; combSec.textContent='COMBINED SHEETS';
+root.appendChild(combSec);
+
+const animComb=make(CW*FRAMES,CH*towers.length);
+const aac=animComb.getContext('2d'); aac.imageSmoothingEnabled=false;
+towers.forEach((t,i)=>aac.drawImage(buildAnimSheet(t),0,i*CH));
+const animCombP=make(animComb.width,animComb.height*2); addChecker(animCombP);
+animCombP.style.cssText='display:block;margin-bottom:10px;border:1px solid #2d1b60;border-radius:4px;max-width:100%;';
+const acpc=animCombP.getContext('2d'); acpc.imageSmoothingEnabled=false;
+acpc.drawImage(animComb,0,0,animCombP.width,animCombP.height);
+root.appendChild(animCombP);
+const animBtn=document.createElement('button'); animBtn.className='dl-all'; animBtn.style.cssText='font-size:9px;padding:7px 16px;';
+animBtn.textContent=`⬇ towers_anim.png  [${CW*FRAMES}×${CH*towers.length}px]`;
+animBtn.onclick=()=>dl(animComb,'cowswap_towers_anim');
+root.appendChild(animBtn);
+
+const uiComb=make(UI_CW*towers.length,UI_CH);
+const ucc=uiComb.getContext('2d'); ucc.imageSmoothingEnabled=false;
+towers.forEach((t,i)=>ucc.drawImage(drawUI(t),i*UI_CW,0));
+const uiP=make(uiComb.width*4,uiComb.height*4); addChecker(uiP);
+uiP.style.cssText='display:block;margin:14px 0 10px;border:1px solid #2d1b60;border-radius:4px;';
+const upc2=uiP.getContext('2d'); upc2.imageSmoothingEnabled=false;
+upc2.drawImage(uiComb,0,0,uiP.width,uiP.height);
+root.appendChild(uiP);
+const uiBtn=document.createElement('button'); uiBtn.className='dl-all'; uiBtn.style.cssText='font-size:9px;padding:7px 16px;';
+uiBtn.textContent=`⬇ towers_icons.png  [${UI_CW*towers.length}×${UI_CH}px]`;
+uiBtn.onclick=()=>dl(uiComb,'cowswap_towers_icons');
+root.appendChild(uiBtn);
+
+const ghComb=make(CW*towers.length,CH);
+const gcc=ghComb.getContext('2d'); gcc.imageSmoothingEnabled=false;
+towers.forEach((t,i)=>gcc.drawImage(drawGhost(t),i*CW,0));
+const ghP2=make(ghComb.width*2,ghComb.height*2); addChecker(ghP2);
+ghP2.style.cssText='display:block;margin:14px 0 10px;border:1px solid #1d4ed8;border-radius:4px;';
+const ghpc2=ghP2.getContext('2d'); ghpc2.imageSmoothingEnabled=false;
+ghpc2.drawImage(ghComb,0,0,ghP2.width,ghP2.height);
+root.appendChild(ghP2);
+const ghBtn=document.createElement('button'); ghBtn.className='dl-all'; ghBtn.style.cssText='font-size:9px;padding:7px 16px;';
+ghBtn.textContent=`⬇ towers_ghost.png  [${CW*towers.length}×${CH}px]`;
+ghBtn.onclick=()=>dl(ghComb,'cowswap_towers_ghost');
+root.appendChild(ghBtn);
+
+// ── BEVY ──
+const info=document.createElement('pre');
+info.style.cssText='background:#0d0a22;border:1px solid #2d1b60;border-radius:6px;padding:14px;font-size:9px;color:#a78bfa;line-height:1.8;margin-top:16px;white-space:pre-wrap;';
+info.textContent=
+`// Animated: ${CW*FRAMES}×${CH*towers.length}px  |  frame ${CW}×${CH}
+TextureAtlasLayout::from_grid(UVec2::new(${CW}, ${CH}), ${FRAMES}, ${towers.length}, None, None)
+// Row: 0=CoW  1=BA  2=SLV  3=SG  4=DP
+//
+// Frame meaning:
+//   0 → bar empty   (just fired)
+//   1 → bar 20%
+//   2 → bar 40%
+//   3 → bar 60%
+//   4 → bar 80%
+//   5 → bar FULL + ready flash
+//
+// Drive frame from cooldown progress:
+//   let frame = (cd_elapsed / cd_total * 5.0).min(4.0) as usize;
+//   if tower.ready { frame = 5; }  // show flash until next fire
+//
+// Icons:  ${UI_CW*towers.length}×${UI_CH}px — Col: 0=CoW 1=BA 2=SLV 3=SG 4=DP
+// Ghost:  ${CW*towers.length}×${CH}px  — same col order`;
+root.appendChild(info);
+
+function downloadAll(){
+  towers.forEach((t,i)=>{
+    setTimeout(()=>dl(buildAnimSheet(t),t.key+'_anim'), i*300);
+    setTimeout(()=>dl(drawUI(t),        t.key+'_icon'), i*300+100);
+    setTimeout(()=>dl(drawGhost(t),     t.key+'_ghost'),i*300+200);
+  });
+  const base=towers.length*300+400;
+  setTimeout(()=>dl(animComb,'cowswap_towers_anim'), base);
+  setTimeout(()=>dl(uiComb,  'cowswap_towers_icons'),base+200);
+  setTimeout(()=>dl(ghComb,  'cowswap_towers_ghost'),base+400);
+}
+</script>
+</body>
+</html>

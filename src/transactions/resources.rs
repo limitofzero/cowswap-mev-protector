@@ -7,6 +7,10 @@ pub struct TxSpawner {
     seed: u64,
     pub layout: Option<Handle<TextureAtlasLayout>>,
     pub textures: Vec<Handle<Image>>,
+    pub fx_layout: Option<Handle<TextureAtlasLayout>>,
+    pub fx_cow: Option<Handle<Image>>,
+    pub fx_batch: Option<Handle<Image>>,
+    pub fx_darkpool: Option<Handle<Image>>,
 }
 
 impl TxSpawner {
@@ -16,6 +20,10 @@ impl TxSpawner {
             seed: 0xdeadbeef_cafebabe,
             layout: None,
             textures: Vec::new(),
+            fx_layout: None,
+            fx_cow: None,
+            fx_batch: None,
+            fx_darkpool: None,
         }
     }
 

@@ -7,7 +7,7 @@ use crate::{
     transactions::{components::ImmunitySource, Transaction},
 };
 
-use super::components::{AnimationTimer, GhostTower, Projectile, Tower, TowerAssets, TowerType};
+use super::components::{AnimationTimer, GhostTower, Projectile, Tower, TowerAssets, TowerRangeVisual, TowerType};
 
 /// Tick every tower's cooldown and apply its effect when it fires.
 pub fn tick_towers(
@@ -157,66 +157,37 @@ pub fn spawn_initial_towers(
         (TowerType::SlippageGuard,      Vec2::new( 180.0,  120.0)),
     ];
 
-    let texture_layout = TextureAtlasLayout::from_grid(UVec2::new(84, 122), 6, 1, None, None);
-    let layout_handle = layouts.add(texture_layout);
-    tower_assets.layout = Some(layout_handle.clone());
+    // Load sprite sheets
+    let anim_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 6, 5, None, None));
+    let ghost_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 5, 1, None, None));
+    let icon_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(46, 59),  5, 1, None, None));
+
+    tower_assets.anim_layout  = Some(anim_layout.clone());
+    tower_assets.ghost_layout = Some(ghost_layout.clone());
+    tower_assets.icon_layout  = Some(icon_layout.clone());
+    tower_assets.anim_sheet   = Some(asset_server.load("towers/cowswap_towers_anim.png"));
+    tower_assets.ghost_sheet  = Some(asset_server.load("towers/cowswap_towers_ghost.png"));
+    tower_assets.icon_sheet   = Some(asset_server.load("towers/cowswap_towers_icons.png"));
 
     for (tower_type, pos) in layout {
         let color = tower_type.color();
         let range = tower_type.range();
-
         let c = color.to_srgba();
-        // Fill — very transparent
-        commands.spawn((
-            Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
-            MeshMaterial2d(materials.add(ColorMaterial {
-                color: Color::srgba(c.red, c.green, c.blue, 0.04),
-                alpha_mode: AlphaMode2d::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(pos.x, pos.y, 0.1),
-            Name::new("TowerRangeFill"),
-        ));
-        // Border ring — more visible
-        commands.spawn((
-            Mesh2d(meshes.add(Annulus::new(range - 0.75, range + 0.75).mesh().resolution(128))),
-            MeshMaterial2d(materials.add(ColorMaterial {
-                color: Color::srgba(c.red, c.green, c.blue, 0.55),
-                alpha_mode: AlphaMode2d::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(pos.x, pos.y, 0.15),
-            Name::new("TowerRangeBorder"),
-        ));
 
-        let sprite = if let Some(image_path) = tower_type.sprite_path() {
-            let texture = asset_server.load(image_path);
-            
+        commands.spawn((
             Sprite {
-                image: texture,
-                texture_atlas: Some(TextureAtlas { layout: layout_handle.clone(), index: 0 }),
-                custom_size: Some(Vec2::new(84.0, 122.0)),
+                image: tower_assets.anim_sheet.clone().unwrap(),
+                texture_atlas: Some(TextureAtlas { layout: anim_layout.clone(), index: tower_type.anim_base() }),
+                custom_size: Some(Vec2::new(84.0, 110.0)),
                 ..default()
-            }
-        } else {
-            Sprite {
-                color,
-                custom_size: Some(Vec2::splat(26.0)),
-                ..default()
-            }
-        };
-
-        // Tower body
-        let mut entity = commands.spawn((
-            sprite,
+            },
             Transform::from_xyz(pos.x, pos.y, 10.0),
             Tower::new(tower_type.clone()),
+            AnimationTimer::new_with_offset(6.0 / tower_type.cooldown_secs(), 6, tower_type.anim_base()),
             Name::new(format!("Tower::{}", tower_type.label())),
-        ));
-        // Only add animation if this tower has a spritesheet
-        if tower_type.sprite_path().is_some() {
-            entity.insert(AnimationTimer::new(3.0, 6));
-        }
+        )).with_children(|p| {
+            spawn_range_visuals(p, &mut meshes, &mut materials, range, c);
+        });
     }
 }
 
@@ -245,35 +216,32 @@ pub fn manage_ghost_tower(
     mut commands: Commands,
     placement_mode: Res<PlacementMode>,
     ghost_q: Query<(Entity, &GhostTower)>,
-    asset_server: Res<AssetServer>,
     tower_assets: Res<TowerAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     if !placement_mode.is_changed() { return; }
     match &*placement_mode {
         PlacementMode::Placing(tower_type) => {
             for (e, _) in &ghost_q { commands.entity(e).despawn(); }
-            let sprite = if let (Some(path), Some(layout)) = (tower_type.sprite_path(), &tower_assets.layout) {
+            let (Some(sheet), Some(layout)) = (tower_assets.ghost_sheet.clone(), tower_assets.ghost_layout.clone()) else { return };
+            let color = tower_type.color();
+            let range = tower_type.range();
+            let c = color.to_srgba();
+            commands.spawn((
                 Sprite {
-                    image: asset_server.load(path),
-                    texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
-                    custom_size: Some(Vec2::new(84.0, 122.0)),
+                    image: sheet,
+                    texture_atlas: Some(TextureAtlas { layout, index: tower_type.atlas_index() }),
+                    custom_size: Some(Vec2::new(84.0, 110.0)),
                     color: Color::srgba(1.0, 1.0, 1.0, 0.65),
                     ..default()
-                }
-            } else {
-                let c = tower_type.color().to_srgba();
-                Sprite {
-                    color: Color::srgba(c.red, c.green, c.blue, 0.65),
-                    custom_size: Some(Vec2::splat(28.0)),
-                    ..default()
-                }
-            };
-            commands.spawn((
-                sprite,
+                },
                 Transform::from_xyz(0.0, -9999.0, 20.0),
                 GhostTower(tower_type.clone()),
                 Name::new("GhostTower"),
-            ));
+            )).with_children(|p| {
+                spawn_ghost_range_visuals(p, &mut meshes, &mut materials, range, c);
+            });
         }
         PlacementMode::Idle => {
             for (e, _) in &ghost_q { commands.entity(e).despawn(); }
@@ -322,7 +290,6 @@ pub fn handle_placement_click(
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    asset_server: Res<AssetServer>,
     tower_assets: Res<TowerAssets>,
 ) {
     let PlacementMode::Placing(ref tower_type) = *placement_mode else { return };
@@ -357,42 +324,98 @@ pub fn handle_placement_click(
     let color = tower_type.color();
     let range = tower_type.range();
     let c = color.to_srgba();
+    let (Some(sheet), Some(layout)) = (tower_assets.anim_sheet.clone(), tower_assets.anim_layout.clone()) else { return };
     commands.spawn((
+        Sprite {
+            image: sheet,
+            texture_atlas: Some(TextureAtlas { layout, index: tower_type.anim_base() }),
+            custom_size: Some(Vec2::new(84.0, 110.0)),
+            ..default()
+        },
+        Transform::from_xyz(pos.x, pos.y, 10.0),
+        Tower::new(tower_type.clone()),
+        AnimationTimer::new_with_offset(6.0 / tower_type.cooldown_secs(), 6, tower_type.anim_base()),
+        Name::new(format!("Tower::{}", tower_type.label())),
+    )).with_children(|p| {
+        spawn_range_visuals(p, &mut meshes, &mut materials, range, c);
+    });
+}
+
+fn spawn_range_visuals(
+    p: &mut bevy::ecs::relationship::RelatedSpawnerCommands<'_, bevy::ecs::hierarchy::ChildOf>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    range: f32,
+    c: bevy::color::Srgba,
+) {
+    p.spawn((
         Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
         MeshMaterial2d(materials.add(ColorMaterial {
             color: Color::srgba(c.red, c.green, c.blue, 0.04),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         })),
-        Transform::from_xyz(pos.x, pos.y, 0.1),
+        Transform::from_xyz(0.0, 0.0, -9.9),
+        Visibility::Hidden,
+        TowerRangeVisual,
     ));
-    commands.spawn((
+    p.spawn((
         Mesh2d(meshes.add(Annulus::new(range - 0.75, range + 0.75).mesh().resolution(128))),
         MeshMaterial2d(materials.add(ColorMaterial {
             color: Color::srgba(c.red, c.green, c.blue, 0.55),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         })),
-        Transform::from_xyz(pos.x, pos.y, 0.15),
+        Transform::from_xyz(0.0, 0.0, -9.85),
+        Visibility::Hidden,
+        TowerRangeVisual,
     ));
-    let sprite = if let (Some(image_path), Some(layout)) = (tower_type.sprite_path(), &tower_assets.layout) {
-        Sprite {
-            image: asset_server.load(image_path),
-            texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
-            custom_size: Some(Vec2::new(84.0, 122.0)),
-            ..default()
-        }
-    } else {
-        Sprite { color, custom_size: Some(Vec2::splat(26.0)), ..default() }
-    };
+}
 
-    let mut entity = commands.spawn((
-        sprite,
-        Transform::from_xyz(pos.x, pos.y, 10.0),
-        Tower::new(tower_type.clone()),
-        Name::new(format!("Tower::{}", tower_type.label())),
+fn spawn_ghost_range_visuals(
+    p: &mut bevy::ecs::relationship::RelatedSpawnerCommands<'_, bevy::ecs::hierarchy::ChildOf>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    range: f32,
+    c: bevy::color::Srgba,
+) {
+    p.spawn((
+        Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
+        MeshMaterial2d(materials.add(ColorMaterial {
+            color: Color::srgba(c.red, c.green, c.blue, 0.07),
+            alpha_mode: AlphaMode2d::Blend,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, 0.0, -9.9),
     ));
-    if tower_type.sprite_path().is_some() {
-        entity.insert(AnimationTimer::new(3.0, 6));
+    p.spawn((
+        Mesh2d(meshes.add(Annulus::new(range - 0.75, range + 0.75).mesh().resolution(128))),
+        MeshMaterial2d(materials.add(ColorMaterial {
+            color: Color::srgba(c.red, c.green, c.blue, 0.70),
+            alpha_mode: AlphaMode2d::Blend,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, 0.0, -9.85),
+    ));
+}
+
+/// Show range circles only for the tower the cursor is currently over.
+pub fn update_tower_range_visibility(
+    tower_q: Query<(&Transform, &Children), With<Tower>>,
+    mut visual_q: Query<&mut Visibility, With<TowerRangeVisual>>,
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+) {
+    let cursor = windows.single().ok()
+        .and_then(|w| w.cursor_position())
+        .and_then(|c| camera_q.single().ok().and_then(|(cam, cam_t)| cam.viewport_to_world_2d(cam_t, c).ok()));
+
+    for (tower_t, children) in &tower_q {
+        let hovered = cursor.map_or(false, |c| c.distance(tower_t.translation.truncate()) < 42.0);
+        for &child in children {
+            if let Ok(mut vis) = visual_q.get_mut(child) {
+                *vis = if hovered { Visibility::Visible } else { Visibility::Hidden };
+            }
+        }
     }
 }

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CowSwap Tower Sprites v7</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#08060f; color:#f0f0ff; font-family:monospace; padding:24px; }
+  h1 { color:#a78bfa; font-size:12px; letter-spacing:3px; margin-bottom:4px; }
+  .sub { font-size:9px; color:#444; margin-bottom:20px; letter-spacing:1px; }
+  .towers-grid { display:flex; flex-wrap:wrap; gap:20px; margin-bottom:32px; }
+  .card { background:#0d0a22; border:1px solid #2d1b60; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .card h3 { font-size:10px; letter-spacing:2px; }
+  .variants { display:flex; gap:12px; align-items:flex-end; }
+  .variant { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .variant-label { font-size:8px; color:#555; letter-spacing:1px; }
+  canvas { image-rendering:pixelated; border-radius:4px; }
+  .checker {
+    background-image: linear-gradient(45deg,#1a1a2e 25%,transparent 25%), linear-gradient(-45deg,#1a1a2e 25%,transparent 25%), linear-gradient(45deg,transparent 75%,#1a1a2e 75%), linear-gradient(-45deg,transparent 75%,#1a1a2e 75%);
+    background-size:8px 8px; background-position:0 0,0 4px,4px -4px,-4px 0; background-color:#0d0d1f;
+  }
+  button { background:#1a0a3a; color:#a78bfa; border:1px solid #4c1d95; padding:5px 12px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:9px; letter-spacing:1px; width:100%; }
+  button:hover { background:#2d1b60; }
+  .dl-all { background:#2d1265; color:#e0d0ff; border:1px solid #7c3aed; padding:9px 24px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:10px; letter-spacing:2px; margin-bottom:22px; display:inline-block; }
+  .dl-all:hover { background:#4c1d95; }
+  .tag { font-size:8px; color:#444; text-align:center; }
+  .section-title { font-size:9px; color:#f59e0b; letter-spacing:3px; border-bottom:1px solid #2d1b60; padding-bottom:6px; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<h1>⚔ COWSWAP TOWER SPRITES v7</h1>
+<p class="sub">No platform · Animated (6f) · UI icon (1f, half size) · Ghost/drag (1f, tinted)</p>
+<button class="dl-all" onclick="downloadAll()">⬇ DOWNLOAD ALL</button>
+<div id="root"></div>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const PAD    = 16;
+const FRAMES = 6;
+
+// ── FULL SIZE (animated spritesheet) ──
+// Inner content: 52×74px (body 52×64, antenna 14px above, 0px platform)
+const IW = 52, IH = 78;   // body top at y=14, ant tip at y=0, body bottom at y=78
+const CW = IW + PAD*2;    // 84
+const CH = IH + PAD*2;    // 110
+
+// ── UI ICON (half size, 1 frame) ──
+// Same drawing routine but at 0.5x scale inside a smaller canvas
+const UI_SCALE = 0.5;
+const UI_IW = Math.round(IW * UI_SCALE);  // 26
+const UI_IH = Math.round(IH * UI_SCALE);  // 39
+const UI_PAD = 10;
+const UI_CW = UI_IW + UI_PAD*2;           // 46
+const UI_CH = UI_IH + UI_PAD*2;           // 59
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const make = (w,h) => { const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
+const addChecker = c => { c.className='checker'; return c; };
+const dl = (canvas,name) => { const a=document.createElement('a'); a.download=name+'.png'; a.href=canvas.toDataURL('image/png'); a.click(); };
+
+function rrect(ctx,x,y,w,h,r,fill,stroke,sw=1.5){
+  ctx.beginPath(); ctx.roundRect(x,y,w,h,r);
+  if(fill){ctx.fillStyle=fill; ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke; ctx.lineWidth=sw; ctx.stroke();}
+}
+function circ(ctx,x,y,r,fill){
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  if(fill){ctx.fillStyle=fill; ctx.fill();}
+}
+function txt(ctx,text,x,y,size,color){
+  ctx.fillStyle=color;
+  ctx.font=`bold ${size}px "Courier New",monospace`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(text,x,y);
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
+
+// ─── TOWER DEFINITIONS ───────────────────────────────────────────────────────
+const towers = [
+  { key:'tower_ba',  abbr:'BA',  color:'#8b5cf6', colorL:'#c4b5fd', bodyC:'#1e1040', bordC:'#8b5cf6' },
+  { key:'tower_sg',  abbr:'SG',  color:'#ec4899', colorL:'#f9a8d4', bodyC:'#200830', bordC:'#ec4899' },
+  { key:'tower_slv', abbr:'SLV', color:'#f59e0b', colorL:'#fde68a', bodyC:'#1a1200', bordC:'#f59e0b' },
+  { key:'tower_dp',  abbr:'DP',  color:'#3b82f6', colorL:'#93c5fd', bodyC:'#001525', bordC:'#3b82f6' },
+  { key:'tower_cow', abbr:'CoW', color:'#10b981', colorL:'#6ee7b7', bodyC:'#031a0f', bordC:'#10b981' },
+];
+
+// ─── CORE DRAW FUNCTION ───────────────────────────────────────────────────────
+// Draws tower body into ctx at given scale.
+// origin = (0,0) is the logical top-left of inner content area.
+// antTipY = 0, bodyTopY = antH, bodyH, NO platform.
+// phase: animation phase 0..2π (for antenna + dots). Pass fixed value for static frames.
+// ghost: if true, draws desaturated + blue overlay instead of normal colors.
+
+function drawTowerInner(ctx, tower, scale, phase, ghost) {
+  const s  = scale;
+  const cx = (IW * s) / 2;
+
+  // Derived dims at scale
+  const bw     = Math.round(52 * s);
+  const bh     = Math.round(64 * s);
+  const bx     = Math.round((IW * s - bw) / 2);
+  const antH   = Math.round(14 * s);   // space above body for antenna
+  const by     = antH;
+  const bandH  = Math.round(16 * s);
+  const br     = Math.round(8  * s);
+  const antTip = Math.round(2  * s);
+  const poleW  = Math.max(1, Math.round(3 * s));
+  const dotR   = Math.max(1.5, 4 * s);
+  const dotCoreR = Math.max(1, 2 * s);
+  const antDotR  = Math.max(2, 5 * s);
+  const antCoreR = Math.max(1, 2.5 * s);
+
+  // Colors — ghost overrides to blue-grey tint
+  const color  = ghost ? '#4488bb' : tower.color;
+  const colorL = ghost ? '#88bbdd' : tower.colorL;
+  const bodyC  = ghost ? '#0a1a2a' : tower.bodyC;
+  const bordC  = ghost ? '#2255aa' : tower.bordC;
+
+  // Ghost overall alpha
+  if(ghost) ctx.globalAlpha = 0.55;
+
+  // ── ANTENNA POLE ──
+  ctx.strokeStyle = colorL;
+  ctx.lineWidth = poleW;
+  ctx.beginPath();
+  ctx.moveTo(cx, by);
+  ctx.lineTo(cx, antTip + antDotR + 1);
+  ctx.stroke();
+
+  // ── ANTENNA DOT (animated via phase, or static for ghost/ui) ──
+  const antAlpha = ghost ? 0.5 : (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(phase)));
+  ctx.globalAlpha = ghost ? 0.35 : antAlpha;
+  ctx.shadowColor = colorL;
+  ctx.shadowBlur  = ghost ? 0 : 8 * s;
+  circ(ctx, cx, antTip, antDotR, colorL);
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = ghost ? 0.25 : (antAlpha * 0.9 + 0.1);
+  circ(ctx, cx, antTip, antCoreR, '#ffffff');
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+
+  // ── BODY ──
+  rrect(ctx, bx, by, bw, bh, br, bodyC, bordC, Math.max(1, 2*s));
+
+  // Inner highlight
+  ctx.globalAlpha = ghost ? 0.04 : 0.08;
+  rrect(ctx, bx+Math.round(4*s), by+Math.round(4*s), bw-Math.round(8*s), Math.round(8*s), [Math.round(4*s),Math.round(4*s),0,0], '#ffffff');
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+
+  // ── TOP BAND ──
+  rrect(ctx, bx, by, bw, bandH, [br,br,0,0], color, bordC, Math.max(1, 2*s));
+
+  // Band shine
+  ctx.globalAlpha = ghost ? 0.1 : 0.3;
+  rrect(ctx, bx+Math.round(6*s), by+Math.round(4*s), bw-Math.round(22*s), Math.round(5*s), Math.round(2*s), '#ffffff');
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+
+  // ── ABBR TEXT ──
+  const fs = Math.max(6, Math.round((tower.abbr.length > 2 ? 14 : 18) * s));
+  txt(ctx, tower.abbr, cx, by + bandH + (bh - bandH)/2, fs, colorL);
+
+  // ── DOTS (only if large enough, skip for ghost) ──
+  if(!ghost && bw >= 30) {
+    const dotSpacing = Math.round(15 * s);
+    const dotBaseX   = bx + Math.round(9 * s);
+    const dotY       = by + bh - Math.round(10 * s);
+    [0,1,2].forEach(i => {
+      const a = 0.12 + 0.88 * (0.5 + 0.5 * Math.sin(phase - i * (Math.PI * 2 / 3)));
+      ctx.globalAlpha = a;
+      circ(ctx, dotBaseX + i*dotSpacing, dotY, dotR, color);
+      ctx.globalAlpha = a * 0.65;
+      circ(ctx, dotBaseX + i*dotSpacing, dotY, dotCoreR, '#ffffff');
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // ── SIDE ACCENT BAR (skip ghost) ──
+  if(!ghost) {
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(bx+bw-Math.round(7*s), by+bandH+Math.round(6*s), Math.round(4*s), bh-bandH-Math.round(20*s));
+    ctx.globalAlpha = 1;
+  }
+
+  // ── GHOST OVERLAY ──
+  if(ghost) {
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#3399ff';
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, br);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ─── VARIANT DRAW FUNCTIONS ───────────────────────────────────────────────────
+
+// 1. ANIMATED frame (full size, CW×CH canvas)
+function drawTowerFrame(tower, frame) {
+  const c = make(CW, CH);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.save();
+  ctx.translate(PAD, PAD);
+  const phase = (frame / FRAMES) * Math.PI * 2;
+  drawTowerInner(ctx, tower, 1.0, phase, false);
+  ctx.restore();
+  return c;
+}
+
+// 2. UI ICON (half size, 1 frame, static phase=0)
+function drawTowerUI(tower) {
+  const c = make(UI_CW, UI_CH);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.save();
+  ctx.translate(UI_PAD, UI_PAD);
+  drawTowerInner(ctx, tower, UI_SCALE, 0, false);
+  ctx.restore();
+  return c;
+}
+
+// 3. GHOST / DRAG (full size, 1 frame, blue-grey tint)
+function drawTowerGhost(tower) {
+  const c = make(CW, CH);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.save();
+  ctx.translate(PAD, PAD);
+  drawTowerInner(ctx, tower, 1.0, 0, true);
+  ctx.restore();
+  return c;
+}
+
+// ─── SHEET BUILDERS ───────────────────────────────────────────────────────────
+
+// Animated: 6 frames side by side
+function buildAnimSheet(tower) {
+  const sheet = make(CW * FRAMES, CH);
+  const ctx = sheet.getContext('2d'); ctx.imageSmoothingEnabled = false;
+  for(let f=0; f<FRAMES; f++) ctx.drawImage(drawTowerFrame(tower, f), f*CW, 0);
+  return sheet;
+}
+
+// UI icon: single frame
+function buildUISheet(tower) {
+  return drawTowerUI(tower);
+}
+
+// Ghost: single frame
+function buildGhostSheet(tower) {
+  return drawTowerGhost(tower);
+}
+
+// ─── UI ──────────────────────────────────────────────────────────────────────
+function buildCard(tower) {
+  const card = document.createElement('div'); card.className = 'card';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = tower.abbr;
+  h3.style.color = tower.colorL;
+  card.appendChild(h3);
+
+  const variants = document.createElement('div'); variants.className = 'variants';
+
+  // ── ANIMATED (6 frames strip preview + live anim) ──
+  const animVar = document.createElement('div'); animVar.className = 'variant';
+
+  // Strip preview (2x)
+  const animSheet = buildAnimSheet(tower);
+  const sp = make(animSheet.width*2, animSheet.height*2);
+  addChecker(sp); sp.style.border='1px solid #2d1b60'; sp.style.borderRadius='4px';
+  const sc = sp.getContext('2d'); sc.imageSmoothingEnabled=false;
+  sc.drawImage(animSheet, 0, 0, sp.width, sp.height);
+  animVar.appendChild(sp);
+
+  // Live anim preview
+  const anim = make(CW*2, CH*2); addChecker(anim);
+  anim.style.border='1px solid #3d2080'; anim.style.borderRadius='4px';
+  const ac = anim.getContext('2d'); ac.imageSmoothingEnabled=false;
+  let af=0;
+  setInterval(()=>{
+    af=(af+1)%FRAMES;
+    ac.clearRect(0,0,anim.width,anim.height);
+    ac.drawImage(drawTowerFrame(tower,af),0,0,anim.width,anim.height);
+  }, 120);
+  ac.drawImage(drawTowerFrame(tower,0),0,0,anim.width,anim.height);
+  animVar.appendChild(anim);
+
+  const al=document.createElement('div'); al.className='variant-label';
+  al.textContent=`ANIMATED · ${CW*FRAMES}×${CH}`;
+  animVar.appendChild(al);
+
+  const abtn=document.createElement('button');
+  abtn.textContent='⬇ anim.png';
+  abtn.onclick=()=>dl(buildAnimSheet(tower), tower.key+'_anim');
+  animVar.appendChild(abtn);
+  variants.appendChild(animVar);
+
+  // ── UI ICON ──
+  const uiVar = document.createElement('div'); uiVar.className='variant';
+  const uiC = buildUISheet(tower);
+  const uiP = make(UI_CW*4, UI_CH*4); addChecker(uiP);
+  uiP.style.border='1px solid #2d1b60'; uiP.style.borderRadius='4px';
+  const upc=uiP.getContext('2d'); upc.imageSmoothingEnabled=false;
+  upc.drawImage(uiC, 0, 0, uiP.width, uiP.height);
+  uiVar.appendChild(uiP);
+  const ul=document.createElement('div'); ul.className='variant-label';
+  ul.textContent=`UI ICON · ${UI_CW}×${UI_CH}`;
+  uiVar.appendChild(ul);
+  const ubtn=document.createElement('button');
+  ubtn.textContent='⬇ icon.png';
+  ubtn.onclick=()=>dl(buildUISheet(tower), tower.key+'_icon');
+  uiVar.appendChild(ubtn);
+  variants.appendChild(uiVar);
+
+  // ── GHOST ──
+  const ghVar = document.createElement('div'); ghVar.className='variant';
+  const ghC = buildGhostSheet(tower);
+  const ghP = make(CW*2, CH*2); addChecker(ghP);
+  ghP.style.border='1px solid #1d4ed8'; ghP.style.borderRadius='4px';
+  const ghpc=ghP.getContext('2d'); ghpc.imageSmoothingEnabled=false;
+  ghpc.drawImage(ghC, 0, 0, ghP.width, ghP.height);
+  ghVar.appendChild(ghP);
+  const gl=document.createElement('div'); gl.className='variant-label';
+  gl.textContent=`GHOST/DRAG · ${CW}×${CH}`;
+  ghVar.appendChild(gl);
+  const gbtn=document.createElement('button');
+  gbtn.textContent='⬇ ghost.png';
+  gbtn.onclick=()=>dl(buildGhostSheet(tower), tower.key+'_ghost');
+  ghVar.appendChild(gbtn);
+  variants.appendChild(ghVar);
+
+  card.appendChild(variants);
+  return card;
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+const root = document.getElementById('root');
+
+const secTitle = document.createElement('div'); secTitle.className='section-title';
+secTitle.textContent='TOWERS — 3 VARIANTS EACH';
+root.appendChild(secTitle);
+
+const grid = document.createElement('div'); grid.className='towers-grid';
+towers.forEach(t => grid.appendChild(buildCard(t)));
+root.appendChild(grid);
+
+// ── COMBINED SHEETS ──
+const combTitle = document.createElement('div'); combTitle.className='section-title';
+combTitle.style.marginTop='8px';
+combTitle.textContent='COMBINED SHEETS';
+root.appendChild(combTitle);
+
+// Animated combined (5 rows)
+const animComb = make(CW*FRAMES, CH*towers.length);
+const aac = animComb.getContext('2d'); aac.imageSmoothingEnabled=false;
+towers.forEach((t,i) => aac.drawImage(buildAnimSheet(t), 0, i*CH));
+
+const animCombP = make(animComb.width*2, animComb.height*2);
+addChecker(animCombP);
+animCombP.style.cssText='display:block;margin-bottom:10px;border:1px solid #2d1b60;border-radius:4px;';
+const acpc=animCombP.getContext('2d'); acpc.imageSmoothingEnabled=false;
+acpc.drawImage(animComb, 0, 0, animCombP.width, animCombP.height);
+root.appendChild(animCombP);
+const animBtn=document.createElement('button'); animBtn.className='dl-all'; animBtn.style.cssText='font-size:9px;padding:7px 16px;';
+animBtn.textContent=`⬇ towers_anim.png  [${CW*FRAMES}×${CH*towers.length}px]`;
+animBtn.onclick=()=>dl(animComb,'cowswap_towers_anim');
+root.appendChild(animBtn);
+
+// UI icons combined (5 in a row, horizontal strip)
+const uiComb = make(UI_CW*towers.length, UI_CH);
+const ucc=uiComb.getContext('2d'); ucc.imageSmoothingEnabled=false;
+towers.forEach((t,i) => ucc.drawImage(buildUISheet(t), i*UI_CW, 0));
+
+const uiCombP = make(uiComb.width*4, uiComb.height*4);
+addChecker(uiCombP);
+uiCombP.style.cssText='display:block;margin:14px 0 10px;border:1px solid #2d1b60;border-radius:4px;';
+const ucpc=uiCombP.getContext('2d'); ucpc.imageSmoothingEnabled=false;
+ucpc.drawImage(uiComb, 0, 0, uiCombP.width, uiCombP.height);
+root.appendChild(uiCombP);
+const uiBtn=document.createElement('button'); uiBtn.className='dl-all'; uiBtn.style.cssText='font-size:9px;padding:7px 16px;';
+uiBtn.textContent=`⬇ towers_icons.png  [${UI_CW*towers.length}×${UI_CH}px]`;
+uiBtn.onclick=()=>dl(uiComb,'cowswap_towers_icons');
+root.appendChild(uiBtn);
+
+// Ghost combined (5 in a row)
+const ghComb = make(CW*towers.length, CH);
+const gcc=ghComb.getContext('2d'); gcc.imageSmoothingEnabled=false;
+towers.forEach((t,i) => gcc.drawImage(buildGhostSheet(t), i*CW, 0));
+
+const ghCombP = make(ghComb.width*2, ghComb.height*2);
+addChecker(ghCombP);
+ghCombP.style.cssText='display:block;margin:14px 0 10px;border:1px solid #1d4ed8;border-radius:4px;';
+const gcpc=ghCombP.getContext('2d'); gcpc.imageSmoothingEnabled=false;
+gcpc.drawImage(ghComb, 0, 0, ghCombP.width, ghCombP.height);
+root.appendChild(ghCombP);
+const ghBtn=document.createElement('button'); ghBtn.className='dl-all'; ghBtn.style.cssText='font-size:9px;padding:7px 16px;';
+ghBtn.textContent=`⬇ towers_ghost.png  [${CW*towers.length}×${CH}px]`;
+ghBtn.onclick=()=>dl(ghComb,'cowswap_towers_ghost');
+root.appendChild(ghBtn);
+
+// ── BEVY INFO ──
+const info = document.createElement('pre');
+info.style.cssText='background:#0d0a22;border:1px solid #2d1b60;border-radius:6px;padding:14px;font-size:9px;color:#a78bfa;line-height:1.8;margin-top:16px;white-space:pre-wrap;';
+info.textContent =
+`// ── Animated spritesheet ──
+// ${CW*FRAMES}×${CH*towers.length}px  |  frame: ${CW}×${CH}  |  6 frames × 5 towers
+TextureAtlasLayout::from_grid(UVec2::new(${CW}, ${CH}), ${FRAMES}, ${towers.length}, None, None)
+// Row: 0=BA  1=SG  2=SLV  3=DP  4=CoW
+
+// ── UI icons (horizontal strip, 1 frame each) ──
+// ${UI_CW*towers.length}×${UI_CH}px  |  frame: ${UI_CW}×${UI_CH}
+TextureAtlasLayout::from_grid(UVec2::new(${UI_CW}, ${UI_CH}), ${towers.length}, 1, None, None)
+// Col: 0=BA  1=SG  2=SLV  3=DP  4=CoW
+
+// ── Ghost/drag (horizontal strip, 1 frame each) ──
+// ${CW*towers.length}×${CH}px  |  frame: ${CW}×${CH}
+TextureAtlasLayout::from_grid(UVec2::new(${CW}, ${CH}), ${towers.length}, 1, None, None)`;
+root.appendChild(info);
+
+// ── DOWNLOAD ALL ──
+function downloadAll() {
+  towers.forEach((t,i) => {
+    setTimeout(()=>dl(buildAnimSheet(t),  t.key+'_anim'),  i*300);
+    setTimeout(()=>dl(buildUISheet(t),    t.key+'_icon'),  i*300+100);
+    setTimeout(()=>dl(buildGhostSheet(t), t.key+'_ghost'), i*300+200);
+  });
+  const base = towers.length*300+400;
+  setTimeout(()=>dl(animComb,'cowswap_towers_anim'),  base);
+  setTimeout(()=>dl(uiComb,  'cowswap_towers_icons'), base+200);
+  setTimeout(()=>dl(ghComb,  'cowswap_towers_ghost'), base+400);
+}
+</script>
+</body>
+</html>

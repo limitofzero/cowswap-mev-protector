@@ -96,16 +96,24 @@ impl TowerType {
         }
     }
 
-    pub fn sprite_path(&self) -> Option<&'static str> {
+    /// Index into the shared tower sprite sheets (cow=0, ba=1, slv=2, sg=3, dp=4).
+    pub fn atlas_index(&self) -> usize {
         match self {
-            TowerType::BatchAuctioneer    => Some("tower_ba.png"),
-            TowerType::CoWMatcher         => Some("tower_cow.png"),
-            TowerType::Solver             => Some("tower_slv.png"),
-            TowerType::SlippageGuard      => Some("tower_sg.png"),
-            TowerType::DarkPoolNode       => Some("tower_dp.png"),
+            TowerType::CoWMatcher      => 0,
+            TowerType::BatchAuctioneer => 1,
+            TowerType::Solver          => 2,
+            TowerType::SlippageGuard   => 3,
+            TowerType::DarkPoolNode    => 4,
         }
     }
+
+    /// First atlas index for this tower's 6-frame animation row in cowswap_towers_anim.png.
+    pub fn anim_base(&self) -> usize { self.atlas_index() * 6 }
 }
+
+/// Marks the range fill/border children — hidden unless the tower is hovered.
+#[derive(Component)]
+pub struct TowerRangeVisual;
 
 /// Marks the semi-transparent ghost tower that follows the cursor during placement.
 #[derive(Component)]
@@ -123,10 +131,18 @@ pub struct Projectile {
     pub damage: f32,
 }
 
-/// Holds shared atlas layout used by all tower sprites.
+/// Shared sprite sheet assets for towers.
 #[derive(Resource, Default)]
 pub struct TowerAssets {
-    pub layout: Option<Handle<TextureAtlasLayout>>,
+    /// cowswap_towers_anim.png — 6 cols × 5 rows, 84×110 per frame
+    pub anim_layout: Option<Handle<TextureAtlasLayout>>,
+    /// cowswap_towers_ghost.png — 5 cols × 1 row, 84×110 per frame
+    pub ghost_layout: Option<Handle<TextureAtlasLayout>>,
+    /// cowswap_towers_icons.png — 5 cols × 1 row, 46×59 per frame
+    pub icon_layout: Option<Handle<TextureAtlasLayout>>,
+    pub anim_sheet: Option<Handle<Image>>,
+    pub ghost_sheet: Option<Handle<Image>>,
+    pub icon_sheet: Option<Handle<Image>>,
 }
 
 /// A placed defense tower.

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{enemies::components::Enemy, mempool::MempoolPath, resources::{GameEconomy, GameScore}, towers::AnimationTimer};
+use super::components::ImmunitySource;
 
 use super::{
     components::Transaction,
@@ -21,6 +22,12 @@ pub fn setup_tx_spawner(
         .iter()
         .map(|t| asset_server.load(t.sprite_path()))
         .collect();
+    spawner.fx_layout = Some(layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::new(80, 88), 6, 1, None, None,
+    )));
+    spawner.fx_cow      = Some(asset_server.load("fx_cow.png"));
+    spawner.fx_batch    = Some(asset_server.load("fx_batch.png"));
+    spawner.fx_darkpool = Some(asset_server.load("fx_darkpool.png"));
 }
 
 pub fn spawn_transactions(
@@ -68,6 +75,18 @@ pub fn spawn_transactions(
             TextFont { font_size: 8.0, ..default() },
             TextColor(label_color),
             Transform::from_xyz(0.0, 32.0, 0.1),
+            super::components::TxAmountLabel,
+        ));
+        // Fx effect sprite — sits behind the tx sprite, animated, hidden until an effect is active
+        parent.spawn((
+            Sprite {
+                custom_size: Some(Vec2::new(80.0, 88.0)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, 0.0, -0.1),
+            Visibility::Hidden,
+            super::components::TxHighlight,
+            AnimationTimer::new(8.0, 6),
         ));
     });
 }
@@ -75,7 +94,7 @@ pub fn spawn_transactions(
 /// Keep the child Text2d label in sync with the tx's current remaining value.
 pub fn update_tx_labels(
     tx_query: Query<(&Transaction, &super::components::TokenType, &Children)>,
-    mut text_query: Query<&mut Text2d>,
+    mut text_query: Query<&mut Text2d, With<super::components::TxAmountLabel>>,
 ) {
     for (tx, token, children) in &tx_query {
         let native = tx.remaining_value / token.cow_rate();
@@ -86,6 +105,53 @@ pub fn update_tx_labels(
             }
         }
     }
+}
+
+/// Show an animated fx sprite behind txs that have an active effect.
+pub fn update_tx_highlight(
+    tx_query: Query<(&Transaction, &Children)>,
+    mut highlight_q: Query<(&mut Sprite, &mut Visibility), With<super::components::TxHighlight>>,
+    spawner: Res<TxSpawner>,
+) {
+    let (Some(layout), Some(fx_cow), Some(fx_batch), Some(fx_darkpool)) = (
+        spawner.fx_layout.clone(),
+        spawner.fx_cow.clone(),
+        spawner.fx_batch.clone(),
+        spawner.fx_darkpool.clone(),
+    ) else { return };
+
+    for (tx, children) in &tx_query {
+        let fx_image = fx_image_for(tx, &fx_cow, &fx_batch, &fx_darkpool);
+        for &child in children {
+            let Ok((mut sprite, mut vis)) = highlight_q.get_mut(child) else { continue };
+            match fx_image.clone() {
+                Some(img) => {
+                    sprite.image = img;
+                    sprite.texture_atlas = Some(TextureAtlas { layout: layout.clone(), index: sprite.texture_atlas.as_ref().map_or(0, |a| a.index) });
+                    *vis = Visibility::Visible;
+                }
+                None => { *vis = Visibility::Hidden; }
+            }
+        }
+    }
+}
+
+fn fx_image_for(
+    tx: &super::components::Transaction,
+    fx_cow: &Handle<Image>,
+    fx_batch: &Handle<Image>,
+    fx_darkpool: &Handle<Image>,
+) -> Option<Handle<Image>> {
+    if let Some((_, source)) = &tx.immunity {
+        return Some(match source {
+            ImmunitySource::CoWMatch => fx_cow.clone(),
+            ImmunitySource::DarkPool => fx_darkpool.clone(),
+        });
+    }
+    if let Some((_, size)) = tx.batch {
+        if size > 1 { return Some(fx_batch.clone()); }
+    }
+    None
 }
 
 fn format_label(amount: f32, symbol: &str) -> String {

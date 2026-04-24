@@ -54,19 +54,20 @@ impl TokenType {
     }
 
     pub fn sprite_path(self) -> &'static str {
-        match self {
-            TokenType::Eth  => "tx_eth.png",
-            TokenType::Usdt => "tx_usdt.png",
-            TokenType::Usdc => "tx_usdc.png",
-            TokenType::Cow  => "tx_cow.png",
-            TokenType::Dai  => "tx_dai.png",
-            TokenType::Wbtc => "tx_wbtc.png",
-        }
+        "tx_usdc.png"
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImmunitySource { CoWMatch, DarkPool }
+
+/// Marker for the amount label child entity on a transaction.
+#[derive(Component)]
+pub struct TxAmountLabel;
+
+/// Marker for the colored border highlight child sprite on a transaction.
+#[derive(Component)]
+pub struct TxHighlight;
 
 /// All mutable state lives here — no component inserts/removes, no archetype changes.
 #[derive(Component)]

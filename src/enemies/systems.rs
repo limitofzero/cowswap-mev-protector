@@ -61,7 +61,9 @@ pub fn extract_value(
         let Ok((tx, tx_t)) = tx_query.get(target) else { continue };
         let dist = enemy_t.translation.truncate().distance(tx_t.translation.truncate());
         if dist > enemy.attack_range { continue; }
-        *drains.entry(target).or_default() += tx.value * enemy.drain_rate * dt;
+        // Batched txs dilute the drain across all members — attacker can't isolate one tx
+        let batch_scale = tx.batch.map_or(1.0, |(_, size)| 1.0 / size.max(1) as f32);
+        *drains.entry(target).or_default() += tx.value * enemy.drain_rate * batch_scale * dt;
     }
 
     // Write pass — each entity touched exactly once

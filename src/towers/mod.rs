@@ -25,6 +25,7 @@ impl Plugin for TowerPlugin {
                 systems::tick_towers,
                 systems::move_projectiles,
                 systems::animate_sprites,
+                systems::update_tower_range_visibility,
             )
                 .run_if(in_state(GameState::Playing)),
         );

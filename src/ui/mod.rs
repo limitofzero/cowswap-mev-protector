@@ -11,8 +11,11 @@ pub struct UiPlugin;
 
 const BAR_H: f32 = 34.0;
 const BAR_Z: f32 = 90.0;
-const BTN_W: f32 = 88.0;
-const BTN_H: f32 = 24.0;
+const BTN_W: f32 = 120.0;
+const BTN_H: f32 = 32.0;
+const BTN_ICON_ZONE: f32 = 28.0;
+const BTN_ICON_W: f32 = 20.0;
+const BTN_ICON_H: f32 = 26.0;
 const BTN_GAP: f32 = 12.0;
 const SHOP_TOWERS: [TowerType; 5] = [
     TowerType::BatchAuctioneer,
@@ -41,7 +44,7 @@ impl Plugin for UiPlugin {
     }
 }
 
-fn setup_world_ui(mut commands: Commands) {
+fn setup_world_ui(mut commands: Commands, tower_assets: Res<crate::towers::TowerAssets>) {
     // ── top bar background ────────────────────────────────────────────
     commands.spawn((
         Sprite {
@@ -93,14 +96,15 @@ fn setup_world_ui(mut commands: Commands) {
         BottomBar,
     ));
 
-    // Shop buttons — one sprite + one label per tower
+    // Shop buttons — parent entity holds background; icon + label are children
     for (idx, tower) in SHOP_TOWERS.iter().enumerate() {
         let x = btn_x(idx);
         let color = tower.color();
         let c = color.to_srgba();
+        // All buttons have icons now (one sheet, one index per tower)
+        let label_local_x = -BTN_W * 0.5 + BTN_ICON_ZONE + (BTN_W - BTN_ICON_ZONE) * 0.5;
 
-        // Button background
-        commands.spawn((
+        let mut btn = commands.spawn((
             Sprite {
                 color: Color::srgba(c.red * 0.2, c.green * 0.2, c.blue * 0.2, 0.95),
                 custom_size: Some(Vec2::new(BTN_W, BTN_H)),
@@ -113,14 +117,28 @@ fn setup_world_ui(mut commands: Commands) {
             Name::new(format!("ShopBtn::{}", tower.label())),
         ));
 
-        // Button label
-        commands.spawn((
-            Text2d::new(format!("{}  {:.0}c", tower.label(), tower.cost())),
-            TextFont { font_size: 11.0, ..default() },
-            TextColor(color),
-            Transform::from_xyz(x, 0.0, BAR_Z + 2.0),
-            BottomBar,
-        ));
+        btn.with_children(|p| {
+            // Icon from shared sheet
+            if let (Some(sheet), Some(layout)) = (tower_assets.icon_sheet.clone(), tower_assets.icon_layout.clone()) {
+                p.spawn((
+                    Sprite {
+                        image: sheet,
+                        texture_atlas: Some(TextureAtlas { layout, index: tower.atlas_index() }),
+                        custom_size: Some(Vec2::new(BTN_ICON_W, BTN_ICON_H)),
+                        ..default()
+                    },
+                    Transform::from_xyz(-BTN_W * 0.5 + BTN_ICON_ZONE * 0.5, 0.0, 1.0),
+                ));
+            }
+
+            // Label — centered in text zone
+            p.spawn((
+                Text2d::new(format!("{} {:.0}c", tower.label(), tower.cost())),
+                TextFont { font_size: 10.0, ..default() },
+                TextColor(color),
+                Transform::from_xyz(label_local_x, 0.0, 1.0),
+            ));
+        });
     }
 
     // Cancel hint — right of the last button
