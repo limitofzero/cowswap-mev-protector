@@ -12,21 +12,23 @@ pub struct EnemyPlugin;
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<components::EnemyAssets>()
+            .init_resource::<components::WaveManager>()
             .add_systems(
-            OnEnter(GameState::Playing),
-            systems::spawn_initial_enemies,
-        )
-        .add_systems(
-            Update,
-            (
-                systems::find_enemy_targets,
-                systems::enemy_movement,
-                systems::extract_value,
-                systems::tick_enemy_slow,
-                systems::check_enemy_deaths,
+                OnEnter(GameState::Playing),
+                systems::setup_enemy_assets,
             )
-                .chain()
-                .run_if(in_state(GameState::Playing)),
-        );
+            .add_systems(
+                Update,
+                (
+                    systems::tick_waves,
+                    systems::find_enemy_targets,
+                    systems::enemy_movement,
+                    systems::extract_value,
+                    systems::tick_enemy_slow,
+                    systems::check_enemy_deaths,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Playing)),
+            );
     }
 }

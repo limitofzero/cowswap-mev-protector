@@ -112,3 +112,90 @@ impl Enemy {
 pub struct EnemyAssets {
     pub layout: Option<Handle<TextureAtlasLayout>>,
 }
+
+// ─── Wave system ──────────────────────────────────────────────────────────────
+
+#[derive(PartialEq, Eq)]
+pub enum WaveState {
+    Countdown,
+    Spawning,
+    WaitForClear,
+}
+
+#[derive(Resource)]
+pub struct WaveManager {
+    pub wave: u32,
+    pub state: WaveState,
+    pub between_timer: Timer,
+    pub spawn_timer: Timer,
+    pub pending: std::collections::VecDeque<EnemyType>,
+    seed: u64,
+}
+
+impl Default for WaveManager {
+    fn default() -> Self {
+        Self {
+            wave: 0,
+            state: WaveState::Countdown,
+            between_timer: Timer::from_seconds(4.0, TimerMode::Once),
+            spawn_timer: Timer::from_seconds(1.2, TimerMode::Repeating),
+            pending: Default::default(),
+            seed: 0xfeed_face_dead_beef,
+        }
+    }
+}
+
+impl WaveManager {
+    fn rng(&mut self) -> u64 {
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 7;
+        self.seed ^= self.seed << 17;
+        self.seed
+    }
+
+    pub fn rand_spawn_pos(&mut self) -> Vec2 {
+        // Spread across 8 off-screen zones so enemies arrive from all directions
+        const ZONES: &[Vec2] = &[
+            Vec2::new(-620.0,  130.0),
+            Vec2::new(-620.0, -180.0),
+            Vec2::new( 620.0,  130.0),
+            Vec2::new( 620.0, -180.0),
+            Vec2::new(  20.0,  400.0),
+            Vec2::new( -20.0, -400.0),
+            Vec2::new(-340.0,  400.0),
+            Vec2::new( 340.0, -400.0),
+        ];
+        let i = (self.rng() as usize) % ZONES.len();
+        ZONES[i]
+    }
+
+    pub fn build_wave(&mut self) {
+        self.wave += 1;
+        self.pending.clear();
+
+        // Increase enemy count each wave; cap at 10
+        let count = (2 + self.wave as usize).min(10);
+
+        // Weight towards tougher types as waves progress
+        for i in 0..count {
+            let roll = (self.rng() % 100) as u32;
+            let difficulty = self.wave.min(10);
+            let enemy = if roll < 40_u32.saturating_sub(difficulty * 3) {
+                EnemyType::Frontrunner
+            } else if roll < 65_u32.saturating_sub(difficulty) {
+                EnemyType::Backrunner
+            } else if roll < 82 {
+                EnemyType::SandwichBot
+            } else {
+                EnemyType::JitLp
+            };
+            // Guarantee at least one JitLp from wave 3 onward on the last slot
+            let enemy = if self.wave >= 3 && i == count - 1 {
+                EnemyType::JitLp
+            } else {
+                enemy
+            };
+            self.pending.push_back(enemy);
+        }
+    }
+}

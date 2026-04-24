@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{towers::AnimationTimer, transactions::Transaction};
 
-use super::components::{Enemy, EnemyType};
+use super::components::{Enemy, EnemyAssets, EnemyType, WaveManager, WaveState};
 
 /// Phase 1 — find the nearest non-immune transaction for each enemy (no range limit).
 pub fn find_enemy_targets(
@@ -71,37 +71,76 @@ pub fn check_enemy_deaths(mut commands: Commands, query: Query<(Entity, &Enemy)>
     }
 }
 
-/// Spawn the starter enemy roster.
-pub fn spawn_initial_enemies(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
+/// Pre-load the shared enemy atlas layout.
+pub fn setup_enemy_assets(
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
-    mut enemy_assets: ResMut<super::components::EnemyAssets>,
+    mut enemy_assets: ResMut<EnemyAssets>,
 ) {
-    let roster: &[(EnemyType, Vec2)] = &[
-        (EnemyType::Frontrunner, Vec2::new(-400.0,  60.0)),
-        (EnemyType::Backrunner,  Vec2::new( 200.0, -100.0)),
-        (EnemyType::Frontrunner, Vec2::new( -50.0, -100.0)),
-    ];
+    enemy_assets.layout = Some(
+        layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None))
+    );
+}
 
-    let layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None));
-    enemy_assets.layout = Some(layout.clone());
+/// Drive the wave state machine: countdown → spawn one-by-one → wait for clear → repeat.
+pub fn tick_waves(
+    mut commands: Commands,
+    mut waves: ResMut<WaveManager>,
+    enemy_assets: Res<EnemyAssets>,
+    asset_server: Res<AssetServer>,
+    enemy_q: Query<&Enemy>,
+    time: Res<Time>,
+) {
+    match waves.state {
+        WaveState::Countdown => {
+            waves.between_timer.tick(time.delta());
+            if waves.between_timer.just_finished() {
+                waves.build_wave();
+                waves.state = WaveState::Spawning;
+                waves.spawn_timer.reset();
+            }
+        }
+        WaveState::Spawning => {
+            waves.spawn_timer.tick(time.delta());
+            if waves.spawn_timer.just_finished() {
+                if let Some(enemy_type) = waves.pending.pop_front() {
+                    let pos = waves.rand_spawn_pos();
+                    spawn_enemy(&mut commands, &asset_server, &enemy_assets, enemy_type, pos);
+                }
+                if waves.pending.is_empty() {
+                    waves.state = WaveState::WaitForClear;
+                }
+            }
+        }
+        WaveState::WaitForClear => {
+            if enemy_q.is_empty() {
+                waves.state = WaveState::Countdown;
+                // Shorten inter-wave pause after the first wave
+                let pause = if waves.wave >= 3 { 6.0 } else { 8.0 };
+                waves.between_timer = Timer::from_seconds(pause, TimerMode::Once);
+            }
+        }
+    }
+}
 
-    for (enemy_type, pos) in roster {
-        let size = enemy_type.size();
-        let sprite = Sprite {
+fn spawn_enemy(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    enemy_assets: &EnemyAssets,
+    enemy_type: EnemyType,
+    pos: Vec2,
+) {
+    let Some(layout) = enemy_assets.layout.clone() else { return };
+    let size = enemy_type.size();
+    commands.spawn((
+        Sprite {
             image: asset_server.load(enemy_type.sprite_path()),
-            texture_atlas: Some(TextureAtlas { layout: layout.clone(), index: 0 }),
+            texture_atlas: Some(TextureAtlas { layout, index: 0 }),
             custom_size: Some(Vec2::splat(size)),
             ..default()
-        };
-
-        commands.spawn((
-            sprite,
-            Transform::from_xyz(pos.x, pos.y, 1.5),
-            Enemy::new(enemy_type.clone()),
-            AnimationTimer::new(3.0, 6),
-            Name::new(format!("{enemy_type:?}")),
-        ));
-    }
+        },
+        Transform::from_xyz(pos.x, pos.y, 1.5),
+        Enemy::new(enemy_type.clone()),
+        AnimationTimer::new(3.0, 6),
+        Name::new(format!("{enemy_type:?}")),
+    ));
 }
