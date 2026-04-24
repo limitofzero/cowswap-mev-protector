@@ -2,10 +2,12 @@ pub mod app;
 pub mod enemies;
 pub mod game;
 pub mod mempool;
+pub mod menu;
 pub mod resources;
 pub mod towers;
 pub mod transactions;
 pub mod ui;
+pub mod utils;
 
 pub use app::run_app;
 

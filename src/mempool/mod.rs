@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
 use crate::towers::AnimationTimer;
 
-use crate::game::GameState;
+use crate::{game::GameState, resources::not_paused};
 
 pub mod resources;
 pub use resources::MempoolPath;
@@ -27,7 +27,7 @@ impl Plugin for MempoolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MempoolPath>()
             .add_systems(OnEnter(GameState::Playing), setup_scene)
-            .add_systems(Update, animate_dots.run_if(in_state(GameState::Playing)));
+            .add_systems(Update, animate_dots.run_if(in_state(GameState::Playing).and(not_paused)));
     }
 }
 
@@ -39,7 +39,7 @@ fn setup_scene(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
-    commands.spawn((Camera2d, Name::new("MainCamera")));
+
 
     let waypoints = &path.waypoints;
 

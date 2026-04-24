@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::GameState;
+use crate::{game::GameState, resources::not_paused};
 
 pub mod components;
 pub mod resources;
@@ -32,7 +32,7 @@ impl Plugin for TowerPlugin {
                 systems::animate_sprites,
                 systems::update_tower_range_visibility,
             )
-                .run_if(in_state(GameState::Playing)),
+                .run_if(in_state(GameState::Playing).and(not_paused)),
         );
     }
 

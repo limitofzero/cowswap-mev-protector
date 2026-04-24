@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
-    enemies::EnemyPlugin, mempool::MempoolPlugin, resources::GameResourcesPlugin,
-    towers::TowerPlugin, transactions::TransactionPlugin, ui::UiPlugin,
+    enemies::EnemyPlugin, mempool::MempoolPlugin, menu::MenuPlugin,
+    resources::GameResourcesPlugin, towers::TowerPlugin,
+    transactions::TransactionPlugin, ui::UiPlugin,
 };
 
 pub mod state;
@@ -14,6 +15,7 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>().add_plugins((
             GameResourcesPlugin,
+            MenuPlugin,
             MempoolPlugin,
             TransactionPlugin,
             EnemyPlugin,

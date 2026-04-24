@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::GameState;
+use crate::{game::GameState, resources::not_paused};
 
 pub mod components;
 pub mod resources;
@@ -24,7 +24,7 @@ impl Plugin for TransactionPlugin {
                     systems::update_tx_labels,
                     systems::update_tx_highlight,
                 )
-                    .run_if(in_state(GameState::Playing)),
+                    .run_if(in_state(GameState::Playing).and(not_paused)),
             );
     }
 }

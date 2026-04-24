@@ -53,6 +53,17 @@ pub enum PlacementMode {
     Removing,
 }
 
+/// Whether the game is currently paused (Space toggles this during Playing).
+#[derive(Resource, Default)]
+pub struct PauseState {
+    pub paused: bool,
+}
+
+/// Run condition: true while the game is NOT paused.
+pub fn not_paused(ps: Res<PauseState>) -> bool {
+    !ps.paused
+}
+
 pub struct GameResourcesPlugin;
 
 impl Plugin for GameResourcesPlugin {
@@ -60,6 +71,7 @@ impl Plugin for GameResourcesPlugin {
         app.init_resource::<GameScore>()
             .init_resource::<GameEconomy>()
             .init_resource::<PlacementMode>()
+            .init_resource::<PauseState>()
             .init_resource::<WaveState>();
     }
 }
