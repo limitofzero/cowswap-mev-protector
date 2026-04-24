@@ -67,6 +67,7 @@ fn setup_world_ui(mut commands: Commands) {
             TextColor(color),
             Transform::from_xyz(x, 0.0, BAR_Z + 1.0),
             StatText(kind),
+            TopBar,
         ));
     }
 

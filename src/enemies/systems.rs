@@ -9,15 +9,29 @@ const BAR_H: f32 = 5.0;
 const BAR_Y: f32 = -30.0;
 
 /// Phase 1 — assign each enemy its nearest unclaimed tx (one enemy per tx).
+/// Enemies with a valid existing target keep it; only bots whose tx is gone/immune re-target.
 pub fn find_enemy_targets(
     mut enemy_query: Query<(&mut Enemy, &Transform)>,
     tx_query: Query<(Entity, &Transaction, &Transform)>,
 ) {
-    let mut claimed: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    // Lock in targets that are still valid so no other bot can steal them.
+    let mut claimed: std::collections::HashSet<Entity> = enemy_query
+        .iter()
+        .filter_map(|(enemy, _)| {
+            let t = enemy.target?;
+            let still_valid = tx_query.get(t).map_or(false, |(_, tx, _)| !tx.is_immune());
+            still_valid.then_some(t)
+        })
+        .collect();
 
     for (mut enemy, enemy_transform) in &mut enemy_query {
-        let pos = enemy_transform.translation.truncate();
+        // Keep valid existing target.
+        if let Some(t) = enemy.target {
+            if claimed.contains(&t) { continue; }
+        }
 
+        // Lost target or had none — find nearest free tx.
+        let pos = enemy_transform.translation.truncate();
         enemy.target = tx_query
             .iter()
             .filter_map(|(e, tx, tx_t)| {
