@@ -43,9 +43,10 @@ const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 /// Compact tooltip shown when hovering a shop button (4 lines).
 #[derive(Component)] struct ShopTooltipPanel;
 #[derive(Component)] struct ShopTooltipLine(u8);
-/// Small tooltip shown when hovering the BaseFee top-bar stat (2 lines).
-#[derive(Component)] struct BaseFeeTooltipPanel;
-#[derive(Component)] struct BaseFeeTooltipLine(u8);
+/// Tooltip panel shown when hovering any top-bar stat. One panel per StatKind.
+#[derive(Component)] struct StatTooltipPanel(StatKind);
+/// A single text line inside a StatTooltipPanel. (stat, line_index)
+#[derive(Component)] struct StatTooltipLine(StatKind, u8);
 /// Drives the press-and-release scale animation; removed when animation completes.
 #[derive(Component)] struct BtnClickEffect(f32);
 
@@ -57,9 +58,9 @@ const SHOP_TT_W:  f32 = 240.0;
 const SHOP_TT_H:  f32 = 106.0;
 const SHOP_TT_LINE_Y: [f32; 4] = [38.0, 18.0, 0.0, -20.0];
 
-const BASEFEE_TT_W: f32 = 280.0;
-const BASEFEE_TT_H: f32 = 52.0;
-const BASEFEE_STAT_X: f32 = 530.0;
+const STAT_TT_W: f32 = 320.0;
+const STAT_TT_H: f32 = 72.0;
+const STAT_TT_LINE_Y: [f32; 3] = [22.0, 2.0, -18.0];
 
 #[derive(Clone, Copy)]
 pub enum StatKind { Block, Settled, Protected, Extracted, Balance, BaseFee }
@@ -70,7 +71,7 @@ impl Plugin for UiPlugin {
             .add_systems(
                 Update,
                 (reposition_ui, update_stats, handle_shop_click, update_tooltip,
-                 update_basefee_tooltip, animate_btn_click)
+                 update_stat_tooltips, animate_btn_click)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -100,7 +101,7 @@ fn setup_world_ui(
         (StatKind::Protected, "Protected: 0 COW",  Color::srgb(0.30, 1.00, 0.45),    -140.0),
         (StatKind::Extracted, "Extracted: 0 COW",  Color::srgb(1.00, 0.35, 0.35),     110.0),
         (StatKind::Balance,   "Balance: 300 COW",  Color::srgb(0.80, 0.65, 1.00),     360.0),
-        (StatKind::BaseFee,   "BaseFee: LOW",       Color::srgb(0.40, 0.90, 0.55),    BASEFEE_STAT_X),
+        (StatKind::BaseFee,   "BaseFee: LOW",       Color::srgb(0.40, 0.90, 0.55),    0.0_f32),
     ];
     for (kind, text, color, x) in stats {
         commands.spawn((
@@ -113,28 +114,32 @@ fn setup_world_ui(
         ));
     }
 
-    // ── BaseFee tooltip (hidden until hover) ──────────────────────────
-    commands.spawn((
-        Sprite {
-            color: Color::srgba(0.04, 0.02, 0.12, 0.94),
-            custom_size: Some(Vec2::new(BASEFEE_TT_W, BASEFEE_TT_H)),
-            ..default()
-        },
-        Transform::from_xyz(-9999.0, -9999.0, BAR_Z + 3.0),
-        Visibility::Hidden,
-        BaseFeeTooltipPanel,
-        Name::new("BaseFeeTooltip"),
-    )).with_children(|p| {
-        for i in 0u8..2 {
-            p.spawn((
-                Text2d::new(""),
-                TextFont { font_size: 12.0, ..default() },
-                TextColor(Color::WHITE),
-                Transform::from_xyz(0.0, 10.0 - i as f32 * 20.0, 0.1),
-                BaseFeeTooltipLine(i),
-            ));
-        }
-    });
+    // ── Stat tooltips (one per top-bar stat, hidden until hover) ──────
+    for kind in [
+        StatKind::Block, StatKind::Settled, StatKind::Protected,
+        StatKind::Extracted, StatKind::Balance, StatKind::BaseFee,
+    ] {
+        commands.spawn((
+            Sprite {
+                color: Color::srgba(0.04, 0.02, 0.12, 0.94),
+                custom_size: Some(Vec2::new(STAT_TT_W, STAT_TT_H)),
+                ..default()
+            },
+            Transform::from_xyz(-9999.0, -9999.0, BAR_Z + 3.0),
+            Visibility::Hidden,
+            StatTooltipPanel(kind),
+        )).with_children(|p| {
+            for i in 0u8..3 {
+                p.spawn((
+                    Text2d::new(""),
+                    TextFont { font_size: 12.0, ..default() },
+                    TextColor(Color::WHITE),
+                    Transform::from_xyz(0.0, STAT_TT_LINE_Y[i as usize], 0.1),
+                    StatTooltipLine(kind, i),
+                ));
+            }
+        });
+    }
 
     // ── bottom bar background ─────────────────────────────────────────
     commands.spawn((
@@ -315,18 +320,36 @@ fn btn_x(idx: usize) -> f32 {
 }
 
 /// Reposition both bars to the top/bottom of the current window every frame.
+/// Also distributes stat labels into equal-width columns across the top bar.
 fn reposition_ui(
     windows: Query<&Window>,
-    mut top_q: Query<&mut Transform, (With<TopBar>, Without<BottomBar>)>,
-    mut bot_q: Query<&mut Transform, (With<BottomBar>, Without<TopBar>)>,
+    mut top_bg_q: Query<&mut Transform, (With<TopBar>, Without<BottomBar>, Without<StatText>)>,
+    mut bot_q:    Query<&mut Transform, (With<BottomBar>, Without<TopBar>)>,
+    mut stat_q:   Query<(&StatText, &mut Transform), (With<TopBar>, Without<BottomBar>)>,
 ) {
     let Ok(win) = windows.single() else { return };
+    let half_w = win.width()  * 0.5;
     let half_h = win.height() * 0.5;
-    let top_y = half_h - TOP_BAR_H * 0.5;
-    let bot_y = -half_h + BOT_BAR_H * 0.5;
+    let top_y  = half_h - TOP_BAR_H * 0.5;
+    let bot_y  = -half_h + BOT_BAR_H * 0.5;
 
-    for mut t in &mut top_q { t.translation.y = top_y; }
-    for mut t in &mut bot_q { t.translation.y = bot_y; }
+    for mut t in &mut top_bg_q { t.translation.y = top_y; }
+    for mut t in &mut bot_q    { t.translation.y = bot_y; }
+
+    const N: f32 = 6.0;
+    let col_w = win.width() / N;
+    for (stat, mut t) in &mut stat_q {
+        let col = match stat.0 {
+            StatKind::Block     => 0,
+            StatKind::Settled   => 1,
+            StatKind::Protected => 2,
+            StatKind::Extracted => 3,
+            StatKind::Balance   => 4,
+            StatKind::BaseFee   => 5,
+        };
+        t.translation.x = -half_w + col_w * (col as f32 + 0.5);
+        t.translation.y = top_y;
+    }
 }
 
 fn update_stats(
@@ -584,51 +607,121 @@ fn tower_stat_text(tt: &TowerType, level: u8) -> String {
 }
 
 
-fn update_basefee_tooltip(
+fn update_stat_tooltips(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    economy: Res<GameEconomy>,
     network: Res<NetworkLoad>,
-    mut panel_q: Query<(&mut Transform, &mut Visibility), With<BaseFeeTooltipPanel>>,
-    mut lines_q: Query<(&BaseFeeTooltipLine, &mut Text2d, &mut TextColor),
-        Without<BaseFeeTooltipPanel>>,
+    waves: Res<WaveManager>,
+    mut panel_q: Query<(&StatTooltipPanel, &mut Transform, &mut Visibility)>,
+    mut line_q:  Query<(&StatTooltipLine, &mut Text2d, &mut TextColor)>,
 ) {
-    let Ok(win) = windows.single() else { return };
-    let Ok((cam, cam_t)) = camera_q.single() else { return };
-    let Ok((mut pt, mut pv)) = panel_q.single_mut() else { return };
+    let Ok(win)        = windows.single()    else { return };
+    let Ok((cam,cam_t)) = camera_q.single()  else { return };
 
+    let half_w = win.width()  * 0.5;
     let half_h = win.height() * 0.5;
     let top_y  = half_h - TOP_BAR_H * 0.5;
-    // Hit-test: cursor within the BaseFee stat region
-    let in_stat = win.cursor_position()
-        .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
-        .map(|w| (w.x - BASEFEE_STAT_X).abs() < 70.0 && (w.y - top_y).abs() < TOP_BAR_H * 0.5)
-        .unwrap_or(false);
+    let col_w  = win.width() / 6.0;
 
-    if !in_stat {
-        *pv = Visibility::Hidden;
-        return;
+    // Which column (0-5) is the cursor over, if any?
+    let hovered_col: Option<usize> = win.cursor_position()
+        .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
+        .and_then(|w| {
+            if (w.y - top_y).abs() > TOP_BAR_H * 0.5 { return None; }
+            let col = ((w.x + half_w) / col_w) as usize;
+            (col < 6).then_some(col)
+        });
+
+    let hovered_kind = hovered_col.map(|c| match c {
+        0 => StatKind::Block,
+        1 => StatKind::Settled,
+        2 => StatKind::Protected,
+        3 => StatKind::Extracted,
+        4 => StatKind::Balance,
+        _ => StatKind::BaseFee,
+    });
+
+    // Position / show-hide each panel
+    for (panel, mut t, mut vis) in &mut panel_q {
+        let kind = panel.0;
+        let active = matches!(hovered_kind, Some(k) if std::mem::discriminant(&k) == std::mem::discriminant(&kind));
+        if !active {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+        let col = match kind {
+            StatKind::Block     => 0,
+            StatKind::Settled   => 1,
+            StatKind::Protected => 2,
+            StatKind::Extracted => 3,
+            StatKind::Balance   => 4,
+            StatKind::BaseFee   => 5,
+        };
+        let x = -half_w + col_w * (col as f32 + 0.5);
+        // Clamp so tooltip stays on screen
+        let x = x.clamp(-half_w + STAT_TT_W * 0.5 + 4.0, half_w - STAT_TT_W * 0.5 - 4.0);
+        *vis = Visibility::Visible;
+        t.translation.x = x;
+        t.translation.y = top_y - TOP_BAR_H * 0.5 - STAT_TT_H * 0.5 - 4.0;
     }
 
-    *pv = Visibility::Visible;
-    pt.translation.x = BASEFEE_STAT_X;
-    pt.translation.y = top_y - TOP_BAR_H * 0.5 - BASEFEE_TT_H * 0.5 - 4.0;
+    // Fill line text for the hovered stat
+    let Some(active_kind) = hovered_kind else { return };
+    let grey  = Color::srgb(0.70, 0.70, 0.70);
+    let white = Color::WHITE;
+    let green = Color::srgb(0.35, 1.00, 0.50);
+    let red   = Color::srgb(1.00, 0.40, 0.40);
+    let cyan  = Color::srgb(0.45, 0.85, 1.00);
 
-    let stat_color = match network.level {
-        0 => Color::srgb(0.40, 0.90, 0.55),
-        1 => Color::srgb(1.00, 0.75, 0.20),
-        _ => Color::srgb(1.00, 0.35, 0.35),
+    let fee_pct = (economy.fee_rate * 100.0).round() as u32;
+
+    let lines: [(String, Color); 3] = match active_kind {
+        StatKind::Block => [
+            ("Each block = 15s of simulated Ethereum time".into(), cyan),
+            (format!("Wave {} — higher blocks spawn stronger, more frequent bots", waves.wave), grey),
+            ("".into(), white),
+        ],
+        StatKind::Settled => [
+            ("Transactions confirmed to the settlement contract".into(), green),
+            (format!("Each settled tx pays you a {}% COW fee", fee_pct), grey),
+            ("Build more towers to protect and settle txs faster".into(), grey),
+        ],
+        StatKind::Protected => [
+            ("Total COW value shielded from MEV extraction".into(), green),
+            ("Saved by CoW mechanisms: batching, matching, dark pools".into(), grey),
+            ("".into(), white),
+        ],
+        StatKind::Extracted => [
+            ("COW value drained by MEV bots from your transactions".into(), red),
+            ("Reach zero by intercepting every bot before it drains a tx".into(), grey),
+            ("".into(), white),
+        ],
+        StatKind::Balance => [
+            ("Your spendable COW — build and upgrade defense towers".into(), white),
+            (format!("Income: {}% settlement fee on each confirmed tx", fee_pct), green),
+            ("Spend: tower placements (130–220 COW) & upgrades".into(), grey),
+        ],
+        StatKind::BaseFee => {
+            let net_color = match network.level {
+                0 => Color::srgb(0.40, 0.90, 0.55),
+                1 => Color::srgb(1.00, 0.75, 0.20),
+                _ => red,
+            };
+            [
+                (network.status_line().to_string(), net_color),
+                (format!("Txs per second: {}   Tx speed: {}%",
+                    network.txs_per_sec_str(), network.speed_pct()), grey),
+                ("Shifts ±1 level each block — affects tx flow & speed".into(), grey),
+            ]
+        },
     };
-    let line_texts = [
-        (network.status_line().to_string(), stat_color),
-        (format!("Txs per second: {}   Tx speed: {}%",
-            network.txs_per_sec_str(), network.speed_pct()),
-         Color::srgb(0.75, 0.75, 0.75)),
-    ];
-    for (line, mut text, mut color) in &mut lines_q {
-        if let Some((t, c)) = line_texts.get(line.0 as usize) {
-            text.0 = t.clone();
-            color.0 = *c;
-        }
+
+    for (line, mut text, mut color) in &mut line_q {
+        if std::mem::discriminant(&line.0) != std::mem::discriminant(&active_kind) { continue; }
+        let (t, c) = &lines[line.1 as usize];
+        text.0  = t.clone();
+        color.0 = *c;
     }
 }
 
