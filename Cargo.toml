@@ -33,8 +33,6 @@ bevy = { version = "0.18.1", default-features = false, features = ["x11"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
-# getrandom 0.3 needs both the cfg flag (in .cargo/config.toml) AND this feature
-# to use the browser's Web Crypto API on wasm32-unknown-unknown.
 getrandom = { version = "0.4.2", features = ["wasm_js"] }
 
 # Fast compilation in dev
@@ -44,13 +42,11 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
-# Optimized release
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 
-# Tiny WASM release — cargo build --profile wasm-release --target wasm32-unknown-unknown
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"
