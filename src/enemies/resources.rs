@@ -26,11 +26,15 @@ impl EnemyAssets {
 #[derive(Resource)]
 pub struct WaveManager {
     pub wave: u32,
-    /// Fires every 15 s (Ethereum block time) — triggers the next wave unconditionally.
+    /// Max active enemies allowed this wave: grows 3 + wave * 2, capped at 20.
+    pub wave_target: u32,
+    /// One-shot 5 s countdown before the first block.
+    pub first_block_timer: Timer,
+    pub first_block_done: bool,
+    /// Fires every 15 s (Ethereum block time) after the first wave.
     pub block_timer: Timer,
-    /// Staggers individual enemy spawns within a wave.
+    /// Staggers individual spawns so they don't all appear at once.
     pub spawn_timer: Timer,
-    pub pending: std::collections::VecDeque<EnemyType>,
     seed: u64,
 }
 
@@ -38,9 +42,11 @@ impl Default for WaveManager {
     fn default() -> Self {
         Self {
             wave: 0,
+            wave_target: 0,
+            first_block_timer: Timer::from_seconds(5.0, TimerMode::Once),
+            first_block_done: false,
             block_timer: Timer::from_seconds(15.0, TimerMode::Repeating),
-            spawn_timer: Timer::from_seconds(1.2, TimerMode::Repeating),
-            pending: Default::default(),
+            spawn_timer: Timer::from_seconds(2.5, TimerMode::Repeating),
             seed: 0xfeed_face_dead_beef,
         }
     }
@@ -69,30 +75,25 @@ impl WaveManager {
         ZONES[i]
     }
 
-    pub fn build_wave(&mut self) {
+    /// Advance to the next wave and update the active-enemy target.
+    /// Ramp: 2, 2, 3, 4, 5, 6 … capped at 20.
+    pub fn next_wave(&mut self) {
         self.wave += 1;
-        self.pending.clear();
+        self.wave_target = if self.wave <= 2 { 2 } else { self.wave.min(20) };
+    }
 
-        let count = (2 + self.wave as usize).min(10);
-
-        for i in 0..count {
-            let roll = (self.rng() % 100) as u32;
-            let difficulty = self.wave.min(10);
-            let enemy = if roll < 40_u32.saturating_sub(difficulty * 3) {
-                EnemyType::Frontrunner
-            } else if roll < 65_u32.saturating_sub(difficulty) {
-                EnemyType::Backrunner
-            } else if roll < 82 {
-                EnemyType::SandwichBot
-            } else {
-                EnemyType::JitLp
-            };
-            let enemy = if self.wave >= 3 && i == count - 1 {
-                EnemyType::JitLp
-            } else {
-                enemy
-            };
-            self.pending.push_back(enemy);
+    /// Pick one enemy type based on current wave difficulty.
+    pub fn pick_enemy(&mut self) -> EnemyType {
+        let roll = (self.rng() % 100) as u32;
+        let difficulty = self.wave.min(10);
+        if roll < 40_u32.saturating_sub(difficulty * 3) {
+            EnemyType::Frontrunner
+        } else if roll < 65_u32.saturating_sub(difficulty) {
+            EnemyType::Backrunner
+        } else if roll < 82 {
+            EnemyType::SandwichBot
+        } else {
+            EnemyType::JitLp
         }
     }
 }

@@ -75,20 +75,24 @@ pub fn extract_value(
     }
 }
 
-/// Move each enemy toward its target (or patrol if it has none).
+/// Move each enemy toward its target tx, or toward the nearest path point when idle.
 pub fn enemy_movement(
     mut enemy_query: Query<(&Enemy, &mut Transform)>,
     tx_query: Query<&Transform, (With<Transaction>, Without<Enemy>)>,
+    path: Res<crate::mempool::MempoolPath>,
     time: Res<Time>,
 ) {
     for (enemy, mut transform) in &mut enemy_query {
-        if let Some(target) = enemy.target {
-            if let Ok(tx_t) = tx_query.get(target) {
-                let dir = (tx_t.translation.truncate() - transform.translation.truncate())
-                    .normalize_or_zero();
-                transform.translation +=
-                    (dir * enemy.effective_speed() * time.delta_secs()).extend(0.0);
-            }
+        let pos = transform.translation.truncate();
+        let dest = if let Some(target) = enemy.target {
+            tx_query.get(target).ok().map(|t| t.translation.truncate())
+        } else {
+            // No target — walk toward the nearest point on the path
+            Some(path.nearest_point(pos))
+        };
+        if let Some(d) = dest {
+            let dir = (d - pos).normalize_or_zero();
+            transform.translation += (dir * enemy.effective_speed() * time.delta_secs()).extend(0.0);
         }
     }
 }
@@ -151,26 +155,41 @@ pub fn setup_enemy_assets(
     enemy_assets.jitlp       = Some(asset_server.load("enemies/enemy_jitlp.png"));
 }
 
-/// Every 15 s a new block arrives — build and queue the next wave unconditionally.
-/// A separate 1.2 s timer staggers individual spawns from the pending queue.
+/// Spawning rule: active_enemies ≤ wave_target at all times.
+/// Every 15 s a new block raises the target. When enemies die, new ones fill the gap.
 pub fn tick_waves(
     mut commands: Commands,
     mut waves: ResMut<WaveManager>,
     enemy_assets: Res<EnemyAssets>,
+    enemy_q: Query<&Enemy>,
     time: Res<Time>,
 ) {
     let delta = time.delta();
 
-    // New block: queue next wave regardless of surviving enemies
-    waves.block_timer.tick(delta);
-    if waves.block_timer.just_finished() {
-        waves.build_wave();
+    // Advance wave on block boundary
+    if !waves.first_block_done {
+        waves.first_block_timer.tick(delta);
+        if waves.first_block_timer.just_finished() {
+            waves.first_block_done = true;
+            waves.next_wave();
+            waves.block_timer.reset();
+        }
+    } else {
+        waves.block_timer.tick(delta);
+        if waves.block_timer.just_finished() {
+            waves.next_wave();
+        }
     }
 
-    // Stagger individual spawns from the pending queue
+    // Fill up to wave_target; spawn batch grows every 8 waves
+    if waves.wave_target == 0 { return; }
     waves.spawn_timer.tick(delta);
     if waves.spawn_timer.just_finished() {
-        if let Some(enemy_type) = waves.pending.pop_front() {
+        let per_tick = 1 + waves.wave / 8;
+        let active = enemy_q.iter().count() as u32;
+        let to_spawn = (waves.wave_target.saturating_sub(active)).min(per_tick);
+        for _ in 0..to_spawn {
+            let enemy_type = waves.pick_enemy();
             let pos = waves.rand_spawn_pos();
             spawn_enemy(&mut commands, &enemy_assets, enemy_type, pos);
         }
