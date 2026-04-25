@@ -141,7 +141,46 @@ impl TowerType {
             self.range(), self.cooldown_secs(), self.cost()
         )
     }
+
+    /// Cost to upgrade from `current_level` to `current_level + 1`.
+    /// Formula: base_cost * 0.5 * 1.5^current_level
+    pub fn upgrade_cost(&self, current_level: u8) -> f32 {
+        self.cost() * 0.5 * 1.5_f32.powi(current_level as i32)
+    }
+
+    /// Solver: projectile damage multiplier at upgrade level.
+    pub fn solver_damage_mult(&self, level: u8) -> f32 {
+        1.0 + 0.10 * level as f32
+    }
+
+    /// CoW: fraction of incoming drain blocked (0.0 = none, 0.3 = 30% at max).
+    pub fn cow_drain_resist(&self, level: u8) -> f32 {
+        0.10 * level as f32
+    }
+
+    /// Batch / DarkPool: effective cooldown in seconds after upgrades.
+    pub fn cooldown_secs_upgraded(&self, level: u8) -> f32 {
+        let reduction = match self {
+            TowerType::BatchAuctioneer => 0.30 * level as f32,
+            TowerType::DarkPoolNode    => 0.20 * level as f32,
+            _                          => 0.0,
+        };
+        (self.cooldown_secs() - reduction).max(0.2)
+    }
+
+    /// One-line description of what each upgrade level adds.
+    pub fn upgrade_effect_desc(&self, level: u8) -> String {
+        match self {
+            TowerType::Solver        => format!("+{}% projectile damage", level * 10),
+            TowerType::CoWMatcher    => format!("+{}% drain resistance", level * 10),
+            TowerType::BatchAuctioneer => format!("-{:.1}s cooldown", 0.30 * level as f32),
+            TowerType::DarkPoolNode  => format!("-{:.1}s cooldown", 0.20 * level as f32),
+            TowerType::SlippageGuard => format!("+{}% slow intensity", level * 10),
+        }
+    }
 }
+
+pub const MAX_UPGRADE_LEVEL: u8 = 3;
 
 /// Marks the range fill/border children — hidden unless the tower is hovered.
 #[derive(Component)]
@@ -180,6 +219,7 @@ pub struct HitEffect {
 #[derive(Component)]
 pub struct Tower {
     pub tower_type: TowerType,
+    pub upgrade_level: u8,
     pub range: f32,
     pub cooldown: Timer,
 }
@@ -190,8 +230,21 @@ impl Tower {
         let secs = tower_type.cooldown_secs();
         Self {
             range,
+            upgrade_level: 0,
             cooldown: Timer::from_seconds(secs, TimerMode::Repeating),
             tower_type,
         }
+    }
+
+    /// Apply the next upgrade level: bump the counter and update affected stats.
+    pub fn apply_upgrade(&mut self) {
+        if self.upgrade_level >= MAX_UPGRADE_LEVEL { return; }
+        self.upgrade_level += 1;
+        let new_cd = self.tower_type.cooldown_secs_upgraded(self.upgrade_level);
+        self.cooldown = Timer::from_seconds(new_cd, TimerMode::Repeating);
+    }
+
+    pub fn can_upgrade(&self) -> bool {
+        self.upgrade_level < MAX_UPGRADE_LEVEL
     }
 }
