@@ -30,6 +30,8 @@ impl Plugin for TowerPlugin {
                 systems::animate_sprites,
                 systems::update_tower_range_visibility,
                 systems::sync_tower_upgrade_visuals,
+                systems::update_upgrade_preview,
+                systems::handle_tower_upgrade_click,
             )
                 .run_if(in_state(GameState::Playing).and(not_paused)),
         );

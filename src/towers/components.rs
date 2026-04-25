@@ -200,6 +200,10 @@ pub const SOLVER_BASE_DAMAGE: f32 = 50.0;
 #[derive(Component)]
 pub struct TowerVisualLevel(pub u8);
 
+/// Semi-transparent preview sprite showing the next upgrade level; child of a Tower entity.
+#[derive(Component)]
+pub struct UpgradePreview;
+
 /// Marks the range fill/border children — hidden unless the tower is hovered.
 #[derive(Component)]
 pub struct TowerRangeVisual;
@@ -240,6 +244,8 @@ pub struct Tower {
     pub upgrade_level: u8,
     pub range: f32,
     pub cooldown: Timer,
+    /// Seconds remaining before the next upgrade is allowed (prevents misclick on placement/upgrade).
+    pub upgrade_cooldown: f32,
 }
 
 impl Tower {
@@ -250,6 +256,7 @@ impl Tower {
             range,
             upgrade_level: 0,
             cooldown: Timer::from_seconds(secs, TimerMode::Repeating),
+            upgrade_cooldown: 2.5,
             tower_type,
         }
     }
@@ -260,9 +267,10 @@ impl Tower {
         self.upgrade_level += 1;
         let new_cd = self.tower_type.cooldown_secs_upgraded(self.upgrade_level);
         self.cooldown = Timer::from_seconds(new_cd, TimerMode::Repeating);
+        self.upgrade_cooldown = 2.5;
     }
 
     pub fn can_upgrade(&self) -> bool {
-        self.upgrade_level < MAX_UPGRADE_LEVEL
+        self.upgrade_level < MAX_UPGRADE_LEVEL && self.upgrade_cooldown <= 0.0
     }
 }

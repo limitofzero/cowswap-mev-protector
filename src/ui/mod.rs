@@ -11,8 +11,8 @@ use crate::{
 
 pub struct UiPlugin;
 
-const TOP_BAR_H: f32 = 34.0;
-const BOT_BAR_H: f32 = 96.0;
+pub const TOP_BAR_H: f32 = 34.0;
+pub const BOT_BAR_H: f32 = 96.0;
 const BAR_H: f32 = TOP_BAR_H; // kept for hit-test compat in other systems
 const BAR_Z: f32 = 90.0;
 const BTN_W: f32 = 148.0;
@@ -47,8 +47,8 @@ const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 #[derive(Component)] struct BtnClickEffect(f32);
 
 const TOOLTIP_W:  f32 = 260.0;
-const TOOLTIP_H:  f32 = 170.0;
-const TOOLTIP_LINE_Y: [f32; 6] = [66.0, 46.0, 24.0, 6.0, -12.0, -30.0];
+const TOOLTIP_H:  f32 = 196.0;
+const TOOLTIP_LINE_Y: [f32; 7] = [78.0, 58.0, 38.0, 18.0, 0.0, -18.0, -44.0];
 
 const SHOP_TT_W:  f32 = 240.0;
 const SHOP_TT_H:  f32 = 106.0;
@@ -238,7 +238,7 @@ fn setup_world_ui(
     )).with_children(|p| {
         p.spawn((Mesh2d(b), MeshMaterial2d(cb), Transform::from_xyz(0.0, 0.0, -0.05)));
         p.spawn((Mesh2d(f), MeshMaterial2d(cf), Transform::from_xyz(0.0, 0.0,  0.0)));
-        for i in 0..6u8 {
+        for i in 0..7u8 {
             p.spawn((
                 Text2d::new(""),
                 TextFont { font_size: 10.0, ..default() },
@@ -392,6 +392,7 @@ fn animate_btn_click(
 fn update_tooltip(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    economy: Res<GameEconomy>,
     tower_q: Query<(&Tower, &Transform),
         (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
     btn_q: Query<(&ShopBtn, &Transform),
@@ -400,7 +401,6 @@ fn update_tooltip(
         (With<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
     mut shop_panel_q: Query<(&mut Transform, &mut Visibility),
         (With<ShopTooltipPanel>, Without<TowerTooltipPanel>)>,
-    // Each lines query must exclude BOTH panels AND the other line type to prove disjointness.
     mut tower_lines_q: Query<(&TowerTooltipLine, &mut Text2d, &mut TextColor, &mut Visibility),
         (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>, Without<ShopTooltipLine>)>,
     mut shop_lines_q: Query<(&ShopTooltipLine, &mut Text2d, &mut TextColor, &mut Visibility),
@@ -425,7 +425,7 @@ fn update_tooltip(
 
     let placed_hit = tower_q.iter()
         .find(|(_, t)| t.translation.truncate().distance(cursor) < 42.0)
-        .map(|(tw, t)| (tw.tower_type.clone(), tw.upgrade_level, t.translation.truncate()));
+        .map(|(tw, t)| (tw.tower_type.clone(), tw.upgrade_level, tw.upgrade_cooldown, t.translation.truncate()));
 
     let btn_hit = btn_q.iter()
         .find(|(_, t)| {
@@ -435,18 +435,18 @@ fn update_tooltip(
         .map(|(btn, t)| (btn.tower.clone(), Vec2::new(t.translation.x, bot_y)));
 
     // ── Tower tooltip ────────────────────────────────────────────────────
-    if let Some((tt, lvl, pos)) = placed_hit {
+    if let Some((tt, lvl, upg_cd, pos)) = placed_hit {
         *shop_pv = Visibility::Hidden;
 
         let col_done   = Color::srgb(1.00, 0.85, 0.20);
-        let col_next   = Color::WHITE;
+        let col_stat   = Color::WHITE;
         let col_locked = Color::srgb(0.45, 0.45, 0.45);
         let col_muted  = Color::srgb(0.50, 0.42, 0.70);
         let col_hi     = Color::srgb(0.85, 0.75, 1.00);
 
-        let mut rows: [(String, Color, bool); 6] = std::array::from_fn(|_| (String::new(), Color::WHITE, true));
+        let mut rows: [(String, Color, bool); 7] = std::array::from_fn(|_| (String::new(), Color::WHITE, true));
         rows[0] = (format!("{}  Lv {}", tt.label(), lvl), col_hi, true);
-        rows[1] = (tower_stat_text(&tt, lvl), col_next, true);
+        rows[1] = (tower_stat_text(&tt, lvl), col_stat, true);
         rows[2] = ("-- UPGRADES --".into(), col_muted, true);
         for row in 0..3u8 {
             let lv = row + 1;
@@ -455,11 +455,29 @@ fn update_tooltip(
                 (format!("[+] Lv{}  {}", lv, effect), col_done)
             } else {
                 let cost = tt.upgrade_cost(row);
-                (format!("[ ] Lv{}  {}  {:.0} CoW", lv, effect, cost),
-                 if lv == lvl + 1 { col_next } else { col_locked })
+                (format!("[ ] Lv{}  {}  {:.0} CoW", lv, effect, cost), col_locked)
             };
             rows[3 + row as usize] = (text, color, true);
         }
+        // Upgrade action line
+        rows[6] = if lvl < crate::towers::MAX_UPGRADE_LEVEL {
+            if upg_cd > 0.0 {
+                (format!("Can be upgraded in {:.1}s", upg_cd),
+                 col_muted, true)
+            } else {
+                let cost = tt.upgrade_cost(lvl);
+                if economy.balance >= cost {
+                    (format!("Upgrade to Lv{}  {:.0} CoW", lvl + 1, cost),
+                     Color::srgb(0.45, 1.00, 0.55), true)
+                } else {
+                    (format!("Need {:.0} CoW to upgrade", cost),
+                     Color::srgb(1.00, 0.40, 0.40), true)
+                }
+            }
+        } else {
+            ("[ MAX LEVEL ]".into(), col_muted, true)
+        };
+
         let v = 55.0 + 8.0 + TOOLTIP_H * 0.5;
         let tx = pos.x.clamp(-half_w + TOOLTIP_W * 0.5 + 4.0, half_w - TOOLTIP_W * 0.5 - 4.0);
         let ty = (pos.y + v).clamp(-half_h + TOOLTIP_H * 0.5 + 4.0, half_h - TOOLTIP_H * 0.5 - 4.0);
