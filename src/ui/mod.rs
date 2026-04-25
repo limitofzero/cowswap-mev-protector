@@ -37,13 +37,22 @@ const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 #[derive(Component)] pub struct StatText(StatKind);
 #[derive(Component)] pub struct ShopBtn { tower: TowerType }
 #[derive(Component)] pub struct RemoveBtn;
-#[derive(Component)] struct TooltipPanel;
-#[derive(Component)] struct TooltipContent;
+/// Tooltip shown when hovering a placed tower (6 lines: name/stat/upgrades).
+#[derive(Component)] struct TowerTooltipPanel;
+#[derive(Component)] struct TowerTooltipLine(u8);
+/// Compact tooltip shown when hovering a shop button (4 lines).
+#[derive(Component)] struct ShopTooltipPanel;
+#[derive(Component)] struct ShopTooltipLine(u8);
 /// Drives the press-and-release scale animation; removed when animation completes.
 #[derive(Component)] struct BtnClickEffect(f32);
 
-const TOOLTIP_W: f32 = 220.0;
-const TOOLTIP_H: f32 = 82.0;
+const TOOLTIP_W:  f32 = 260.0;
+const TOOLTIP_H:  f32 = 170.0;
+const TOOLTIP_LINE_Y: [f32; 6] = [66.0, 46.0, 24.0, 6.0, -12.0, -30.0];
+
+const SHOP_TT_W:  f32 = 240.0;
+const SHOP_TT_H:  f32 = 106.0;
+const SHOP_TT_LINE_Y: [f32; 4] = [38.0, 18.0, 0.0, -20.0];
 
 #[derive(Clone, Copy)]
 pub enum StatKind { Block, Settled, Protected, Extracted, Balance }
@@ -207,42 +216,61 @@ fn setup_world_ui(
         ));
     });
 
-    // Tooltip panel — transparent Sprite for visibility propagation; mesh children for visuals
-    const CR: f32 = 7.0; // corner radius
-    let border_mesh = meshes.add(make_rounded_rect(TOOLTIP_W, TOOLTIP_H, CR, 8));
-    let fill_mesh   = meshes.add(make_rounded_rect(TOOLTIP_W - 4.0, TOOLTIP_H - 4.0, CR - 1.0, 8));
+    // ── Tower tooltip (placed-tower hover) — 6 lines ────────────────────
+    let spawn_tooltip = |_commands: &mut Commands,
+                         meshes: &mut Assets<Mesh>,
+                         materials: &mut Assets<ColorMaterial>,
+                         w: f32, h: f32, cr: f32| {
+        let b = meshes.add(make_rounded_rect(w,       h,       cr,       8));
+        let f = meshes.add(make_rounded_rect(w - 4.0, h - 4.0, cr - 1.0, 8));
+        let col_border = materials.add(ColorMaterial { color: Color::srgba(0.50, 0.35, 0.88, 0.95), alpha_mode: AlphaMode2d::Blend, ..default() });
+        let col_fill   = materials.add(ColorMaterial { color: Color::srgba(0.04, 0.02, 0.18, 0.97), alpha_mode: AlphaMode2d::Blend, ..default() });
+        (b, f, col_border, col_fill)
+    };
+
+    let (b, f, cb, cf) = spawn_tooltip(&mut commands, &mut meshes, &mut materials, TOOLTIP_W, TOOLTIP_H, 7.0);
     commands.spawn((
         Sprite { color: Color::NONE, custom_size: Some(Vec2::new(TOOLTIP_W, TOOLTIP_H)), ..default() },
         Transform::from_xyz(0.0, -9999.0, BAR_Z + 3.0),
         Visibility::Hidden,
-        TooltipPanel,
-        Name::new("Tooltip"),
+        TowerTooltipPanel,
+        Name::new("TowerTooltip"),
     )).with_children(|p| {
-        p.spawn((
-            Mesh2d(border_mesh),
-            MeshMaterial2d(materials.add(ColorMaterial {
-                color: Color::srgba(0.50, 0.35, 0.88, 0.95),
-                alpha_mode: AlphaMode2d::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(0.0, 0.0, -0.05),
-        ));
-        p.spawn((
-            Mesh2d(fill_mesh),
-            MeshMaterial2d(materials.add(ColorMaterial {
-                color: Color::srgba(0.04, 0.02, 0.18, 0.97),
-                alpha_mode: AlphaMode2d::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        ));
-        p.spawn((
-            Text2d::new(""),
-            TextFont { font_size: 10.0, ..default() },
-            TextColor(Color::srgb(0.90, 0.90, 0.90)),
-            Transform::from_xyz(0.0, 0.0, 0.5),
-            TooltipContent,
-        ));
+        p.spawn((Mesh2d(b), MeshMaterial2d(cb), Transform::from_xyz(0.0, 0.0, -0.05)));
+        p.spawn((Mesh2d(f), MeshMaterial2d(cf), Transform::from_xyz(0.0, 0.0,  0.0)));
+        for i in 0..6u8 {
+            p.spawn((
+                Text2d::new(""),
+                TextFont { font_size: 10.0, ..default() },
+                TextColor(Color::WHITE),
+                Transform::from_xyz(0.0, TOOLTIP_LINE_Y[i as usize], 0.5),
+                TowerTooltipLine(i),
+                Visibility::Hidden,
+            ));
+        }
+    });
+
+    // ── Shop tooltip (button hover) — 4 lines, compact ──────────────────
+    let (b, f, cb, cf) = spawn_tooltip(&mut commands, &mut meshes, &mut materials, SHOP_TT_W, SHOP_TT_H, 7.0);
+    commands.spawn((
+        Sprite { color: Color::NONE, custom_size: Some(Vec2::new(SHOP_TT_W, SHOP_TT_H)), ..default() },
+        Transform::from_xyz(0.0, -9999.0, BAR_Z + 3.0),
+        Visibility::Hidden,
+        ShopTooltipPanel,
+        Name::new("ShopTooltip"),
+    )).with_children(|p| {
+        p.spawn((Mesh2d(b), MeshMaterial2d(cb), Transform::from_xyz(0.0, 0.0, -0.05)));
+        p.spawn((Mesh2d(f), MeshMaterial2d(cf), Transform::from_xyz(0.0, 0.0,  0.0)));
+        for i in 0..4u8 {
+            p.spawn((
+                Text2d::new(""),
+                TextFont { font_size: 10.0, ..default() },
+                TextColor(Color::WHITE),
+                Transform::from_xyz(0.0, SHOP_TT_LINE_Y[i as usize], 0.5),
+                ShopTooltipLine(i),
+                Visibility::Hidden,
+            ));
+        }
     });
 
 }
@@ -364,19 +392,30 @@ fn animate_btn_click(
 fn update_tooltip(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    tower_q: Query<(&Tower, &Transform), Without<TooltipPanel>>,
-    btn_q: Query<(&ShopBtn, &Transform), Without<TooltipPanel>>,
-    mut panel_q: Query<(&mut Transform, &mut Visibility), With<TooltipPanel>>,
-    mut content_q: Query<&mut Text2d, With<TooltipContent>>,
+    tower_q: Query<(&Tower, &Transform),
+        (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
+    btn_q: Query<(&ShopBtn, &Transform),
+        (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
+    mut tower_panel_q: Query<(&mut Transform, &mut Visibility),
+        (With<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
+    mut shop_panel_q: Query<(&mut Transform, &mut Visibility),
+        (With<ShopTooltipPanel>, Without<TowerTooltipPanel>)>,
+    // Each lines query must exclude BOTH panels AND the other line type to prove disjointness.
+    mut tower_lines_q: Query<(&TowerTooltipLine, &mut Text2d, &mut TextColor, &mut Visibility),
+        (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>, Without<ShopTooltipLine>)>,
+    mut shop_lines_q: Query<(&ShopTooltipLine, &mut Text2d, &mut TextColor, &mut Visibility),
+        (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>, Without<TowerTooltipLine>)>,
 ) {
     let Ok(win) = windows.single() else { return };
     let Ok((cam, cam_t)) = camera_q.single() else { return };
-    let Ok((mut panel_t, mut panel_vis)) = panel_q.single_mut() else { return };
+    let Ok((mut tower_pt, mut tower_pv)) = tower_panel_q.single_mut() else { return };
+    let Ok((mut shop_pt,  mut shop_pv))  = shop_panel_q.single_mut()  else { return };
 
     let Some(cursor) = win.cursor_position()
         .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
     else {
-        *panel_vis = Visibility::Hidden;
+        *tower_pv = Visibility::Hidden;
+        *shop_pv  = Visibility::Hidden;
         return;
     };
 
@@ -384,9 +423,9 @@ fn update_tooltip(
     let half_h = win.height() * 0.5;
     let bot_y  = -half_h + BOT_BAR_H * 0.5;
 
-    let tower_hit = tower_q.iter()
+    let placed_hit = tower_q.iter()
         .find(|(_, t)| t.translation.truncate().distance(cursor) < 42.0)
-        .map(|(tw, t)| (tw.tower_type.clone(), t.translation.truncate()));
+        .map(|(tw, t)| (tw.tower_type.clone(), tw.upgrade_level, t.translation.truncate()));
 
     let btn_hit = btn_q.iter()
         .find(|(_, t)| {
@@ -395,31 +434,90 @@ fn update_tooltip(
         })
         .map(|(btn, t)| (btn.tower.clone(), Vec2::new(t.translation.x, bot_y)));
 
-    let Some((tower_type, anchor)) = tower_hit.or(btn_hit) else {
-        *panel_vis = Visibility::Hidden;
-        return;
-    };
+    // ── Tower tooltip ────────────────────────────────────────────────────
+    if let Some((tt, lvl, pos)) = placed_hit {
+        *shop_pv = Visibility::Hidden;
 
-    // Buttons: tooltip appears above the bottom bar. Towers: above the sprite.
-    let v_offset = if (anchor.y - bot_y).abs() < BOT_BAR_H {
-        BOT_BAR_H * 0.5 + 8.0 + TOOLTIP_H * 0.5   // clear the taller bar
+        let col_done   = Color::srgb(1.00, 0.85, 0.20);
+        let col_next   = Color::WHITE;
+        let col_locked = Color::srgb(0.45, 0.45, 0.45);
+        let col_muted  = Color::srgb(0.50, 0.42, 0.70);
+        let col_hi     = Color::srgb(0.85, 0.75, 1.00);
+
+        let mut rows: [(String, Color, bool); 6] = std::array::from_fn(|_| (String::new(), Color::WHITE, true));
+        rows[0] = (format!("{}  Lv {}", tt.label(), lvl), col_hi, true);
+        rows[1] = (tower_stat_text(&tt, lvl), col_next, true);
+        rows[2] = ("-- UPGRADES --".into(), col_muted, true);
+        for row in 0..3u8 {
+            let lv = row + 1;
+            let effect = tt.upgrade_effect_desc(lv);
+            let (text, color) = if lv <= lvl {
+                (format!("[+] Lv{}  {}", lv, effect), col_done)
+            } else {
+                let cost = tt.upgrade_cost(row);
+                (format!("[ ] Lv{}  {}  {:.0} CoW", lv, effect, cost),
+                 if lv == lvl + 1 { col_next } else { col_locked })
+            };
+            rows[3 + row as usize] = (text, color, true);
+        }
+        let v = 55.0 + 8.0 + TOOLTIP_H * 0.5;
+        let tx = pos.x.clamp(-half_w + TOOLTIP_W * 0.5 + 4.0, half_w - TOOLTIP_W * 0.5 - 4.0);
+        let ty = (pos.y + v).clamp(-half_h + TOOLTIP_H * 0.5 + 4.0, half_h - TOOLTIP_H * 0.5 - 4.0);
+        tower_pt.translation = Vec3::new(tx, ty, tower_pt.translation.z);
+        *tower_pv = Visibility::Visible;
+
+        for (line, mut text, mut color, mut vis) in &mut tower_lines_q {
+            let (t, c, show) = &rows[line.0 as usize];
+            text.0 = t.clone();
+            *color = TextColor(*c);
+            *vis   = if *show { Visibility::Inherited } else { Visibility::Hidden };
+        }
+
+    // ── Shop tooltip ─────────────────────────────────────────────────────
+    } else if let Some((tt, anchor)) = btn_hit {
+        *tower_pv = Visibility::Hidden;
+
+        let col_hi   = Color::srgb(0.85, 0.75, 1.00);
+        let col_gray = Color::srgb(0.72, 0.72, 0.72);
+        let parts: Vec<&str> = tt.description().splitn(2, '\n').collect();
+        let line1 = parts.first().copied().unwrap_or("").to_string();
+        let line2 = parts.get(1).copied().unwrap_or("").to_string();
+        let rows: [(String, Color, bool); 4] = [
+            (tt.label().to_string(), col_hi,   true),
+            (line1,                  col_gray,  true),
+            (line2.clone(),          col_gray,  !line2.is_empty()),
+            (tt.stats_line(),        col_gray,  true),
+        ];
+
+        let v = BOT_BAR_H * 0.5 + 8.0 + SHOP_TT_H * 0.5;
+        let tx = anchor.x.clamp(-half_w + SHOP_TT_W * 0.5 + 4.0, half_w - SHOP_TT_W * 0.5 - 4.0);
+        let ty = (anchor.y + v).clamp(-half_h + SHOP_TT_H * 0.5 + 4.0, half_h - SHOP_TT_H * 0.5 - 4.0);
+        shop_pt.translation = Vec3::new(tx, ty, shop_pt.translation.z);
+        *shop_pv = Visibility::Visible;
+
+        for (line, mut text, mut color, mut vis) in &mut shop_lines_q {
+            let (t, c, show) = &rows[line.0 as usize];
+            text.0 = t.clone();
+            *color = TextColor(*c);
+            *vis   = if *show { Visibility::Inherited } else { Visibility::Hidden };
+        }
+
     } else {
-        55.0 + 8.0 + TOOLTIP_H * 0.5               // just above the tower sprite
-    };
-    let tx = anchor.x.clamp(-half_w + TOOLTIP_W * 0.5 + 4.0, half_w - TOOLTIP_W * 0.5 - 4.0);
-    let ty = (anchor.y + v_offset)
-        .clamp(-half_h + TOOLTIP_H * 0.5 + 4.0, half_h - TOOLTIP_H * 0.5 - 4.0);
-    panel_t.translation.x = tx;
-    panel_t.translation.y = ty;
-    *panel_vis = Visibility::Visible;
+        *tower_pv = Visibility::Hidden;
+        *shop_pv  = Visibility::Hidden;
+    }
+}
 
-    if let Ok(mut text) = content_q.single_mut() {
-        text.0 = format!(
-            "{}\n{}\n{}",
-            tower_type.label(),
-            tower_type.description(),
-            tower_type.stats_line(),
-        );
+fn tower_stat_text(tt: &TowerType, level: u8) -> String {
+    let cd = tt.cooldown_secs_upgraded(level);
+    match tt {
+        TowerType::Solver          => format!("Attacks bots  {:.0} HP dmg  every {:.1}s",
+                                              tt.solver_damage(level), cd),
+        TowerType::CoWMatcher      => format!("Grants MEV immunity for 6s  every {:.1}s", cd),
+        TowerType::BatchAuctioneer => format!("Groups txs into batches  every {:.1}s", cd),
+        TowerType::SlippageGuard   => format!("Slows bots to {}% speed  every {:.1}s",
+                                              tt.slow_pct(level), cd),
+        TowerType::DarkPoolNode    => format!("Hides txs for 4s  every {:.1}s", cd),
     }
 }
 

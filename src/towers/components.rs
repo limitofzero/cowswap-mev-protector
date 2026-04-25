@@ -153,19 +153,30 @@ impl TowerType {
         1.0 + 0.10 * level as f32
     }
 
+    /// Solver: absolute HP damage per projectile at the given upgrade level.
+    pub fn solver_damage(&self, level: u8) -> f32 {
+        SOLVER_BASE_DAMAGE * self.solver_damage_mult(level)
+    }
+
     /// CoW: fraction of incoming drain blocked (0.0 = none, 0.3 = 30% at max).
     pub fn cow_drain_resist(&self, level: u8) -> f32 {
         0.10 * level as f32
     }
 
-    /// Batch / DarkPool: effective cooldown in seconds after upgrades.
+    /// Effective cooldown in seconds after upgrades.
     pub fn cooldown_secs_upgraded(&self, level: u8) -> f32 {
         let reduction = match self {
             TowerType::BatchAuctioneer => 0.30 * level as f32,
-            TowerType::DarkPoolNode    => 0.20 * level as f32,
+            // DP: Lv1 -0.5s, Lv2 -0.5-0.7=1.2s, Lv3 -0.5-0.7-0.9=2.1s
+            TowerType::DarkPoolNode    => [0.0_f32, 0.5, 1.2, 2.1][level.min(3) as usize],
             _                          => 0.0,
         };
         (self.cooldown_secs() - reduction).max(0.2)
+    }
+
+    /// SlippageGuard: effective slow-to speed percentage (e.g. 35 = 35% speed).
+    pub fn slow_pct(&self, level: u8) -> u32 {
+        35u32.saturating_sub(5 * level as u32).max(10)
     }
 
     /// One-line description of what each upgrade level adds.
@@ -174,13 +185,19 @@ impl TowerType {
             TowerType::Solver        => format!("+{}% projectile damage", level * 10),
             TowerType::CoWMatcher    => format!("+{}% drain resistance", level * 10),
             TowerType::BatchAuctioneer => format!("-{:.1}s cooldown", 0.30 * level as f32),
-            TowerType::DarkPoolNode  => format!("-{:.1}s cooldown", 0.20 * level as f32),
+            TowerType::DarkPoolNode  => match level {
+                1 => "-0.5s cooldown".into(),
+                2 => "-0.7s cooldown".into(),
+                3 => "-0.9s cooldown".into(),
+                _ => String::new(),
+            },
             TowerType::SlippageGuard => format!("+{}% slow intensity", level * 10),
         }
     }
 }
 
 pub const MAX_UPGRADE_LEVEL: u8 = 3;
+pub const SOLVER_BASE_DAMAGE: f32 = 50.0;
 
 /// Marks the range fill/border children — hidden unless the tower is hovered.
 #[derive(Component)]

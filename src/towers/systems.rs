@@ -83,7 +83,7 @@ pub fn tick_towers(
                             ..default()
                         },
                         Transform::from_xyz(tower_pos.x, tower_pos.y, 5.0),
-                        Projectile { target: target_entity, speed: 280.0, damage: 30.0 },
+                        Projectile { target: target_entity, speed: 280.0, damage: tower.tower_type.solver_damage(tower.upgrade_level) },
                         AnimationTimer::new(12.0, 6),
                         Name::new("Projectile"),
                     ));
