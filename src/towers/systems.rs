@@ -200,15 +200,15 @@ pub fn tick_hit_effects(
 pub fn animate_sprites(time: Res<Time>, mut query: Query<(&mut AnimationTimer, &mut Sprite)>) {
     for (mut anim, mut sprite) in &mut query {
         anim.timer.tick(time.delta());
-        if anim.timer.just_finished() {
-            if let Some(atlas) = &mut sprite.texture_atlas {
-                // Don't animate over a status frame that lives beyond our strip.
-                if atlas.index >= anim.base + anim.frames {
-                    continue;
-                }
-                let local = atlas.index.saturating_sub(anim.base);
-                atlas.index = anim.base + (local + 1) % anim.frames;
+        if anim.timer.just_finished()
+            && let Some(atlas) = &mut sprite.texture_atlas
+        {
+            // Don't animate over a status frame that lives beyond our strip.
+            if atlas.index >= anim.base + anim.frames {
+                continue;
             }
+            let local = atlas.index.saturating_sub(anim.base);
+            atlas.index = anim.base + (local + 1) % anim.frames;
         }
     }
 }
@@ -488,6 +488,7 @@ pub fn update_delete_cursor(
 }
 
 /// Left-click to place, right-click / Escape to cancel.
+#[allow(clippy::too_many_arguments)]
 pub fn handle_placement_click(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -667,6 +668,7 @@ fn spawn_ghost_range_visuals(
 
 /// When in Removing mode: left-click a tower to demolish it for REMOVE_COST COW.
 /// RMB / Escape cancels the mode.
+#[allow(clippy::too_many_arguments)]
 pub fn handle_remove_tower(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -730,7 +732,7 @@ pub fn update_tower_range_visibility(
         });
 
     for (tower_t, children) in &tower_q {
-        let hovered = cursor.map_or(false, |c| c.distance(tower_t.translation.truncate()) < 42.0);
+        let hovered = cursor.is_some_and(|c| c.distance(tower_t.translation.truncate()) < 42.0);
         for &child in children {
             if let Ok(mut vis) = visual_q.get_mut(child) {
                 *vis = if hovered {
@@ -779,6 +781,13 @@ pub fn sync_tower_upgrade_visuals(
     }
 }
 
+type UpgradePreviewQ<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Visibility, &'static mut AnimationTimer),
+    (With<UpgradePreview>, Without<TowerVisualLevel>),
+>;
+
 /// Show the next-level upgrade preview sprite on the hovered tower when the player can afford it.
 /// The preview uses the same AnimationTimer fps as the tower so it animates at the same speed.
 pub fn update_upgrade_preview(
@@ -787,10 +796,7 @@ pub fn update_upgrade_preview(
     economy: Res<crate::resources::GameEconomy>,
     tower_assets: Res<TowerAssets>,
     tower_q: Query<(&Tower, &Transform, &Children)>,
-    mut preview_q: Query<
-        (&mut Visibility, &mut AnimationTimer),
-        (With<UpgradePreview>, Without<TowerVisualLevel>),
-    >,
+    mut preview_q: UpgradePreviewQ,
 ) {
     let cursor = windows
         .single()
@@ -806,7 +812,7 @@ pub fn update_upgrade_preview(
     let _layout = tower_assets.upgrade_layout.clone();
 
     for (tower, tower_t, children) in &tower_q {
-        let hovered = cursor.map_or(false, |c| c.distance(tower_t.translation.truncate()) < 42.0);
+        let hovered = cursor.is_some_and(|c| c.distance(tower_t.translation.truncate()) < 42.0);
         let can_afford = tower.can_upgrade()
             && economy.balance >= tower.tower_type.upgrade_cost(tower.upgrade_level);
 

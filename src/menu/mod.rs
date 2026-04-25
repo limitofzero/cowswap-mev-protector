@@ -321,6 +321,7 @@ fn update_btn_label(
 }
 
 /// Handle Space (pause toggle) and button click (start / proceed).
+#[allow(clippy::too_many_arguments)]
 fn handle_menu_input(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,

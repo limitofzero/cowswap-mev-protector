@@ -79,7 +79,7 @@ impl Default for NetworkLoad {
     fn default() -> Self {
         Self {
             level: 0,
-            seed: 0xc0ffee_dead_beef_00,
+            seed: 0xc0ff_eede_adbe_ef00,
         }
     }
 }

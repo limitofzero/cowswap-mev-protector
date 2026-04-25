@@ -183,10 +183,10 @@ fn fx_image_for(
             ImmunitySource::DarkPool => fx_darkpool.clone(),
         });
     }
-    if let Some((_, size)) = tx.batch {
-        if size > 1 {
-            return Some(fx_batch.clone());
-        }
+    if let Some((_, size)) = tx.batch
+        && size > 1
+    {
+        return Some(fx_batch.clone());
     }
     None
 }

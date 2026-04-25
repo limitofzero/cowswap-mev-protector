@@ -223,9 +223,9 @@ fn update_mempool_colors(
     for mut s in &mut shim_q {
         s.color = PATH_SHIM_COLORS[lv];
     }
-    if let Some(handle) = &dot_mat_res.0 {
-        if let Some(mat) = materials.get_mut(handle) {
-            mat.color = DOT_COLORS[lv];
-        }
+    if let Some(handle) = &dot_mat_res.0
+        && let Some(mat) = materials.get_mut(handle)
+    {
+        mat.color = DOT_COLORS[lv];
     }
 }

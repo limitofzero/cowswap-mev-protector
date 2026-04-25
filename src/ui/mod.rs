@@ -500,6 +500,7 @@ fn btn_x(idx: usize) -> f32 {
 
 /// Reposition both bars to the top/bottom of the current window every frame.
 /// Also distributes stat labels into equal-width columns across the top bar.
+#[allow(clippy::type_complexity)]
 fn reposition_ui(
     windows: Query<&Window>,
     mut top_bg_q: Query<&mut Transform, (With<TopBar>, Without<BottomBar>, Without<StatText>)>,
@@ -587,6 +588,7 @@ fn update_stats(
 }
 
 /// Click on a shop button in world space → enter placement/remove mode.
+#[allow(clippy::too_many_arguments)]
 pub fn handle_shop_click(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -632,18 +634,17 @@ pub fn handle_shop_click(
     }
 
     // Remove button — toggle
-    if let Ok((entity, t)) = remove_btn_q.single() {
-        if (world_pos.x - t.translation.x).abs() <= BTN_W * 0.5
-            && (world_pos.y - bot_y).abs() <= BTN_H * 0.5
-        {
-            commands.entity(entity).insert(BtnClickEffect(0.0));
-            *placement_mode = if *placement_mode == PlacementMode::Removing {
-                PlacementMode::Idle
-            } else {
-                PlacementMode::Removing
-            };
-            return;
-        }
+    if let Ok((entity, t)) = remove_btn_q.single()
+        && (world_pos.x - t.translation.x).abs() <= BTN_W * 0.5
+        && (world_pos.y - bot_y).abs() <= BTN_H * 0.5
+    {
+        commands.entity(entity).insert(BtnClickEffect(0.0));
+        *placement_mode = if *placement_mode == PlacementMode::Removing {
+            PlacementMode::Idle
+        } else {
+            PlacementMode::Removing
+        };
+        return;
     }
 
     *placement_mode = PlacementMode::Idle;
@@ -670,6 +671,7 @@ fn animate_btn_click(
     }
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn update_tooltip(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,

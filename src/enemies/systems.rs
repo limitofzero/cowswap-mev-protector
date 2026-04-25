@@ -18,17 +18,17 @@ pub fn find_enemy_targets(
         .iter()
         .filter_map(|(enemy, _)| {
             let t = enemy.target?;
-            let still_valid = tx_query.get(t).map_or(false, |(_, tx, _)| !tx.is_immune());
+            let still_valid = tx_query.get(t).is_ok_and(|(_, tx, _)| !tx.is_immune());
             still_valid.then_some(t)
         })
         .collect();
 
     for (mut enemy, enemy_transform) in &mut enemy_query {
         // Keep valid existing target.
-        if let Some(t) = enemy.target {
-            if claimed.contains(&t) {
-                continue;
-            }
+        if let Some(t) = enemy.target
+            && claimed.contains(&t)
+        {
+            continue;
         }
 
         // Lost target or had none — find nearest free tx.
