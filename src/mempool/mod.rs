@@ -76,12 +76,12 @@ fn setup_scene(
     let base_cap = meshes.add(Circle::new(BASE_W * 0.5));
     let shim_cap = meshes.add(Circle::new(SHIM_W * 0.5));
 
-    for i in 0..waypoints.len() - 1 {
-        let a = waypoints[i];
-        let b = waypoints[i + 1];
-        let mid = (a + b) * 0.5;
-        let len = a.distance(b);
-        let angle = (b - a).to_angle();
+    for seg_idx in 0..waypoints.len() - 1 {
+        let seg_start = waypoints[seg_idx];
+        let seg_end = waypoints[seg_idx + 1];
+        let mid = (seg_start + seg_end) * 0.5;
+        let len = seg_start.distance(seg_end);
+        let angle = (seg_end - seg_start).to_angle();
         let rot = Quat::from_rotation_z(angle);
 
         // Base layer
@@ -137,8 +137,8 @@ fn setup_scene(
     });
     dot_mat_res.0 = Some(dot_mat_handle.clone());
     let dot_mat = dot_mat_handle;
-    for i in 0..8 {
-        let progress = i as f32 / 8.0;
+    for dot_idx in 0..8 {
+        let progress = dot_idx as f32 / 8.0;
         let pos = path.position_at(progress);
         commands.spawn((
             Mesh2d(dot_mesh.clone()),

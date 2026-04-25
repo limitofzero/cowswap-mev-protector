@@ -31,16 +31,16 @@ pub fn find_enemy_targets(
     let mut claimed: std::collections::HashSet<Entity> = enemy_query
         .iter()
         .filter_map(|(enemy, _)| {
-            let t = enemy.target?;
-            let still_valid = tx_query.get(t).is_ok_and(|(_, tx, _)| !tx.is_immune());
-            still_valid.then_some(t)
+            let target_entity = enemy.target?;
+            let still_valid = tx_query.get(target_entity).is_ok_and(|(_, tx, _)| !tx.is_immune());
+            still_valid.then_some(target_entity)
         })
         .collect();
 
     for (mut enemy, enemy_transform) in &mut enemy_query {
         // Keep valid existing target.
-        if let Some(t) = enemy.target
-            && claimed.contains(&t)
+        if let Some(target_entity) = enemy.target
+            && claimed.contains(&target_entity)
         {
             continue;
         }
@@ -49,17 +49,17 @@ pub fn find_enemy_targets(
         let pos = enemy_transform.translation.truncate();
         enemy.target = tx_query
             .iter()
-            .filter_map(|(e, tx, tx_t)| {
-                if tx.is_immune() || claimed.contains(&e) {
+            .filter_map(|(entity, tx, tx_transform)| {
+                if tx.is_immune() || claimed.contains(&entity) {
                     return None;
                 }
-                Some((e, pos.distance(tx_t.translation.truncate())))
+                Some((entity, pos.distance(tx_transform.translation.truncate())))
             })
-            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(e, _)| e);
+            .min_by(|lhs, rhs| lhs.1.partial_cmp(&rhs.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(entity, _)| entity);
 
-        if let Some(t) = enemy.target {
-            claimed.insert(t);
+        if let Some(target_entity) = enemy.target {
+            claimed.insert(target_entity);
         }
     }
 }
@@ -161,12 +161,12 @@ pub fn update_enemy_hp_bars(
 fn hp_color(ratio: f32) -> Color {
     if ratio > 0.5 {
         // green → yellow
-        let t = (1.0 - ratio) * 2.0;
-        Color::srgb(t, 1.0, 0.0)
+        let blend = (1.0 - ratio) * 2.0;
+        Color::srgb(blend, 1.0, 0.0)
     } else {
         // yellow → red
-        let t = ratio * 2.0;
-        Color::srgb(1.0, t, 0.0)
+        let blend = ratio * 2.0;
+        Color::srgb(1.0, blend, 0.0)
     }
 }
 

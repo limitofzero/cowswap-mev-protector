@@ -93,11 +93,11 @@ impl Enemy {
     }
 
     pub fn new_leveled(enemy_type: EnemyType, level: u8) -> Self {
-        let l = (level as usize).min(3);
-        let hp = enemy_type.max_hp() * LEVEL_HP_MULT[l];
+        let clamped_level = (level as usize).min(3);
+        let hp = enemy_type.max_hp() * LEVEL_HP_MULT[clamped_level];
         Self {
-            speed: enemy_type.move_speed() * LEVEL_SPEED_MULT[l],
-            drain_rate: enemy_type.drain_rate() * LEVEL_DRAIN_MULT[l],
+            speed: enemy_type.move_speed() * LEVEL_SPEED_MULT[clamped_level],
+            drain_rate: enemy_type.drain_rate() * LEVEL_DRAIN_MULT[clamped_level],
             attack_range: enemy_type.attack_range(),
             target: None,
             hp,

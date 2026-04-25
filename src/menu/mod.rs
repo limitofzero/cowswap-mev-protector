@@ -159,8 +159,8 @@ fn setup_menu(
             // Enemy rows: name (left-aligned) on upper line, description on lower line
             let row_start_y = 118.0_f32;
             let row_step = 52.0_f32;
-            for (i, (enemy_type, name, desc)) in enemies.iter().enumerate() {
-                let y = row_start_y - i as f32 * row_step;
+            for (row_idx, (enemy_type, name, desc)) in enemies.iter().enumerate() {
+                let row_y = row_start_y - row_idx as f32 * row_step;
                 p.spawn((
                     Text2d::new(*name),
                     TextFont {
@@ -168,7 +168,7 @@ fn setup_menu(
                         ..default()
                     },
                     TextColor(enemy_type.color()),
-                    Transform::from_xyz(TEXT_X, y + 9.0, 1.0),
+                    Transform::from_xyz(TEXT_X, row_y + 9.0, 1.0),
                     Anchor::CENTER_LEFT,
                 ));
                 p.spawn((
@@ -178,7 +178,7 @@ fn setup_menu(
                         ..default()
                     },
                     TextColor(gray),
-                    Transform::from_xyz(TEXT_X, y - 9.0, 1.0),
+                    Transform::from_xyz(TEXT_X, row_y - 9.0, 1.0),
                     Anchor::CENTER_LEFT,
                 ));
             }

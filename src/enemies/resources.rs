@@ -75,8 +75,8 @@ impl WaveManager {
             Vec2::new(-340.0, 400.0),
             Vec2::new(340.0, -400.0),
         ];
-        let i = (self.rng() as usize) % ZONES.len();
-        ZONES[i]
+        let zone_idx = (self.rng() as usize) % ZONES.len();
+        ZONES[zone_idx]
     }
 
     /// Quotas of elevated bots per wave: [lv1, lv2, lv3].

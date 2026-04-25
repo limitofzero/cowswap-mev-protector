@@ -190,7 +190,7 @@ fn setup_world_ui(
                 StatTooltipPanel(kind),
             ))
             .with_children(|p| {
-                for i in 0u8..3 {
+                for line_idx in 0u8..3 {
                     p.spawn((
                         Text2d::new(""),
                         TextFont {
@@ -198,8 +198,8 @@ fn setup_world_ui(
                             ..default()
                         },
                         TextColor(Color::WHITE),
-                        Transform::from_xyz(0.0, STAT_TT_LINE_Y[i as usize], 0.1),
-                        StatTooltipLine(kind, i),
+                        Transform::from_xyz(0.0, STAT_TT_LINE_Y[line_idx as usize], 0.1),
+                        StatTooltipLine(kind, line_idx),
                     ));
                 }
             });
@@ -230,15 +230,15 @@ fn setup_world_ui(
     for (idx, tower) in SHOP_TOWERS.iter().enumerate() {
         let x = btn_x(idx);
         let color = tower.color();
-        let c = color.to_srgba();
+        let srgba = color.to_srgba();
 
         let col_border = materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, 0.90),
+            color: Color::srgba(srgba.red, srgba.green, srgba.blue, 0.90),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         });
         let col_fill = materials.add(ColorMaterial {
-            color: Color::srgba(c.red * 0.12, c.green * 0.12, c.blue * 0.12, 0.97),
+            color: Color::srgba(srgba.red * 0.12, srgba.green * 0.12, srgba.blue * 0.12, 0.97),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         });
@@ -383,8 +383,8 @@ fn setup_world_ui(
                          w: f32,
                          h: f32,
                          cr: f32| {
-        let b = meshes.add(make_rounded_rect(w, h, cr, 8));
-        let f = meshes.add(make_rounded_rect(w - 4.0, h - 4.0, cr - 1.0, 8));
+        let border_mesh = meshes.add(make_rounded_rect(w, h, cr, 8));
+        let fill_mesh = meshes.add(make_rounded_rect(w - 4.0, h - 4.0, cr - 1.0, 8));
         let col_border = materials.add(ColorMaterial {
             color: Color::srgba(0.50, 0.35, 0.88, 0.95),
             alpha_mode: AlphaMode2d::Blend,
@@ -395,10 +395,10 @@ fn setup_world_ui(
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         });
-        (b, f, col_border, col_fill)
+        (border_mesh, fill_mesh, col_border, col_fill)
     };
 
-    let (b, f, cb, cf) = spawn_tooltip(
+    let (border_mesh, fill_mesh, cb, cf) = spawn_tooltip(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -420,16 +420,16 @@ fn setup_world_ui(
         ))
         .with_children(|p| {
             p.spawn((
-                Mesh2d(b),
+                Mesh2d(border_mesh),
                 MeshMaterial2d(cb),
                 Transform::from_xyz(0.0, 0.0, -0.05),
             ));
             p.spawn((
-                Mesh2d(f),
+                Mesh2d(fill_mesh),
                 MeshMaterial2d(cf),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ));
-            for i in 0..7u8 {
+            for line_idx in 0..7u8 {
                 p.spawn((
                     Text2d::new(""),
                     TextFont {
@@ -437,15 +437,15 @@ fn setup_world_ui(
                         ..default()
                     },
                     TextColor(Color::WHITE),
-                    Transform::from_xyz(0.0, TOOLTIP_LINE_Y[i as usize], 0.5),
-                    TowerTooltipLine(i),
+                    Transform::from_xyz(0.0, TOOLTIP_LINE_Y[line_idx as usize], 0.5),
+                    TowerTooltipLine(line_idx),
                     Visibility::Hidden,
                 ));
             }
         });
 
     // ── Shop tooltip (button hover) — 4 lines, compact ──────────────────
-    let (b, f, cb, cf) = spawn_tooltip(
+    let (border_mesh, fill_mesh, cb, cf) = spawn_tooltip(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -467,16 +467,16 @@ fn setup_world_ui(
         ))
         .with_children(|p| {
             p.spawn((
-                Mesh2d(b),
+                Mesh2d(border_mesh),
                 MeshMaterial2d(cb),
                 Transform::from_xyz(0.0, 0.0, -0.05),
             ));
             p.spawn((
-                Mesh2d(f),
+                Mesh2d(fill_mesh),
                 MeshMaterial2d(cf),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ));
-            for i in 0..4u8 {
+            for line_idx in 0..4u8 {
                 p.spawn((
                     Text2d::new(""),
                     TextFont {
@@ -484,8 +484,8 @@ fn setup_world_ui(
                         ..default()
                     },
                     TextColor(Color::WHITE),
-                    Transform::from_xyz(0.0, SHOP_TT_LINE_Y[i as usize], 0.5),
-                    ShopTooltipLine(i),
+                    Transform::from_xyz(0.0, SHOP_TT_LINE_Y[line_idx as usize], 0.5),
+                    ShopTooltipLine(line_idx),
                     Visibility::Hidden,
                 ));
             }
@@ -493,8 +493,8 @@ fn setup_world_ui(
 }
 
 fn btn_x(idx: usize) -> f32 {
-    let n = TOTAL_BTN_COUNT as f32;
-    let total = n * BTN_W + (n - 1.0) * BTN_GAP;
+    let btn_count = TOTAL_BTN_COUNT as f32;
+    let total = btn_count * BTN_W + (btn_count - 1.0) * BTN_GAP;
     -total * 0.5 + idx as f32 * (BTN_W + BTN_GAP) + BTN_W * 0.5
 }
 
@@ -655,17 +655,17 @@ fn animate_btn_click(
     mut commands: Commands,
     mut btn_q: Query<(Entity, &mut Transform, &mut BtnClickEffect)>,
 ) {
-    for (entity, mut t, mut effect) in &mut btn_q {
+    for (entity, mut transform, mut effect) in &mut btn_q {
         effect.0 += time.delta_secs() / 0.14;
         // Press down (0→0.5) then spring back (0.5→1.0)
-        let s = if effect.0 < 0.5 {
+        let scale = if effect.0 < 0.5 {
             1.0 - effect.0 * 0.18
         } else {
             0.91 + (effect.0 - 0.5) * 0.18
         };
-        t.scale = Vec3::splat(s.clamp(0.91, 1.0));
+        transform.scale = Vec3::splat(scale.clamp(0.91, 1.0));
         if effect.0 >= 1.0 {
-            t.scale = Vec3::ONE;
+            transform.scale = Vec3::ONE;
             commands.entity(entity).remove::<BtnClickEffect>();
         }
     }
@@ -739,23 +739,23 @@ fn update_tooltip(
 
     let placed_hit = tower_q
         .iter()
-        .find(|(_, t)| t.translation.truncate().distance(cursor) < 42.0)
-        .map(|(tw, t)| {
+        .find(|(_, transform)| transform.translation.truncate().distance(cursor) < 42.0)
+        .map(|(tw, transform)| {
             (
                 tw.tower_type.clone(),
                 tw.upgrade_level,
                 tw.upgrade_cooldown,
-                t.translation.truncate(),
+                transform.translation.truncate(),
             )
         });
 
     let btn_hit = btn_q
         .iter()
-        .find(|(_, t)| {
-            (cursor.x - t.translation.x).abs() <= BTN_W * 0.5
+        .find(|(_, transform)| {
+            (cursor.x - transform.translation.x).abs() <= BTN_W * 0.5
                 && (cursor.y - bot_y).abs() <= BOT_BAR_H * 0.5 + 4.0
         })
-        .map(|(btn, t)| (btn.tower.clone(), Vec2::new(t.translation.x, bot_y)));
+        .map(|(btn, transform)| (btn.tower.clone(), Vec2::new(transform.translation.x, bot_y)));
 
     // ── Tower tooltip ────────────────────────────────────────────────────
     if let Some((tt, lvl, upg_cd, pos)) = placed_hit {
@@ -814,12 +814,12 @@ fn update_tooltip(
             ("[ MAX LEVEL ]".into(), col_muted, true)
         };
 
-        let v = 55.0 + 8.0 + TOOLTIP_H * 0.5;
+        let tooltip_offset_y = 55.0 + 8.0 + TOOLTIP_H * 0.5;
         let tx = pos.x.clamp(
             -half_w + TOOLTIP_W * 0.5 + 4.0,
             half_w - TOOLTIP_W * 0.5 - 4.0,
         );
-        let ty = (pos.y + v).clamp(
+        let ty = (pos.y + tooltip_offset_y).clamp(
             -half_h + TOOLTIP_H * 0.5 + 4.0,
             half_h - TOOLTIP_H * 0.5 - 4.0,
         );
@@ -827,9 +827,9 @@ fn update_tooltip(
         *tower_pv = Visibility::Visible;
 
         for (line, mut text, mut color, mut vis) in &mut tower_lines_q {
-            let (t, c, show) = &rows[line.0 as usize];
-            text.0 = t.clone();
-            *color = TextColor(*c);
+            let (text_str, text_color, show) = &rows[line.0 as usize];
+            text.0 = text_str.clone();
+            *color = TextColor(*text_color);
             *vis = if *show {
                 Visibility::Inherited
             } else {
@@ -853,12 +853,12 @@ fn update_tooltip(
             (tt.stats_line(), col_gray, true),
         ];
 
-        let v = BOT_BAR_H * 0.5 + 8.0 + SHOP_TT_H * 0.5;
+        let shop_offset_y = BOT_BAR_H * 0.5 + 8.0 + SHOP_TT_H * 0.5;
         let tx = anchor.x.clamp(
             -half_w + SHOP_TT_W * 0.5 + 4.0,
             half_w - SHOP_TT_W * 0.5 - 4.0,
         );
-        let ty = (anchor.y + v).clamp(
+        let ty = (anchor.y + shop_offset_y).clamp(
             -half_h + SHOP_TT_H * 0.5 + 4.0,
             half_h - SHOP_TT_H * 0.5 - 4.0,
         );
@@ -866,9 +866,9 @@ fn update_tooltip(
         *shop_pv = Visibility::Visible;
 
         for (line, mut text, mut color, mut vis) in &mut shop_lines_q {
-            let (t, c, show) = &rows[line.0 as usize];
-            text.0 = t.clone();
-            *color = TextColor(*c);
+            let (text_str, text_color, show) = &rows[line.0 as usize];
+            text.0 = text_str.clone();
+            *color = TextColor(*text_color);
             *vis = if *show {
                 Visibility::Inherited
             } else {
@@ -922,16 +922,16 @@ fn update_stat_tooltips(
     // Which column (0-5) is the cursor over, if any?
     let hovered_col: Option<usize> = win
         .cursor_position()
-        .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
-        .and_then(|w| {
-            if (w.y - top_y).abs() > TOP_BAR_H * 0.5 {
+        .and_then(|screen_pos| cam.viewport_to_world_2d(cam_t, screen_pos).ok())
+        .and_then(|world_pos| {
+            if (world_pos.y - top_y).abs() > TOP_BAR_H * 0.5 {
                 return None;
             }
-            let col = ((w.x + half_w) / col_w) as usize;
+            let col = ((world_pos.x + half_w) / col_w) as usize;
             (col < 6).then_some(col)
         });
 
-    let hovered_kind = hovered_col.map(|c| match c {
+    let hovered_kind = hovered_col.map(|col_idx| match col_idx {
         0 => StatKind::Block,
         1 => StatKind::Settled,
         2 => StatKind::Protected,
@@ -941,7 +941,7 @@ fn update_stat_tooltips(
     });
 
     // Position / show-hide each panel
-    for (panel, mut t, mut vis) in &mut panel_q {
+    for (panel, mut transform, mut vis) in &mut panel_q {
         let kind = panel.0;
         let active = matches!(hovered_kind, Some(k) if std::mem::discriminant(&k) == std::mem::discriminant(&kind));
         if !active {
@@ -956,15 +956,15 @@ fn update_stat_tooltips(
             StatKind::Balance => 4,
             StatKind::BaseFee => 5,
         };
-        let x = -half_w + col_w * (col as f32 + 0.5);
+        let panel_x = -half_w + col_w * (col as f32 + 0.5);
         // Clamp so tooltip stays on screen
-        let x = x.clamp(
+        let panel_x = panel_x.clamp(
             -half_w + STAT_TT_W * 0.5 + 4.0,
             half_w - STAT_TT_W * 0.5 - 4.0,
         );
         *vis = Visibility::Visible;
-        t.translation.x = x;
-        t.translation.y = top_y - TOP_BAR_H * 0.5 - STAT_TT_H * 0.5 - 4.0;
+        transform.translation.x = panel_x;
+        transform.translation.y = top_y - TOP_BAR_H * 0.5 - STAT_TT_H * 0.5 - 4.0;
     }
 
     // Fill line text for the hovered stat

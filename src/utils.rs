@@ -8,31 +8,31 @@ pub fn make_rounded_rect(width: f32, height: f32, radius: f32, steps: u32) -> Me
     use std::f32::consts::FRAC_PI_2;
     let hw = width * 0.5;
     let hh = height * 0.5;
-    let r = radius.min(hw).min(hh);
+    let arc_radius = radius.min(hw).min(hh);
     // (corner_center_x, corner_center_y, arc_start_angle)
     let corners: [(f32, f32, f32); 4] = [
-        (hw - r, hh - r, 0.0),
-        (-hw + r, hh - r, FRAC_PI_2),
-        (-hw + r, -hh + r, FRAC_PI_2 * 2.0),
-        (hw - r, -hh + r, FRAC_PI_2 * 3.0),
+        (hw - arc_radius, hh - arc_radius, 0.0),
+        (-hw + arc_radius, hh - arc_radius, FRAC_PI_2),
+        (-hw + arc_radius, -hh + arc_radius, FRAC_PI_2 * 2.0),
+        (hw - arc_radius, -hh + arc_radius, FRAC_PI_2 * 3.0),
     ];
     let mut positions: Vec<[f32; 3]> = vec![[0.0, 0.0, 0.0]]; // center fan vertex
     let mut indices: Vec<u32> = Vec::new();
     for (cx, cy, start) in corners {
         let base = positions.len() as u32;
-        for i in 0..=steps {
-            let a = start + (i as f32 / steps as f32) * FRAC_PI_2;
-            positions.push([cx + r * a.cos(), cy + r * a.sin(), 0.0]);
+        for step in 0..=steps {
+            let angle = start + (step as f32 / steps as f32) * FRAC_PI_2;
+            positions.push([cx + arc_radius * angle.cos(), cy + arc_radius * angle.sin(), 0.0]);
         }
-        for i in 0..steps {
-            indices.extend_from_slice(&[0, base + i, base + i + 1]);
+        for step in 0..steps {
+            indices.extend_from_slice(&[0, base + step, base + step + 1]);
         }
     }
     // Bridge triangles between consecutive corner arcs
-    let n = steps + 1;
-    for c in 0..4u32 {
-        let next = (c + 1) % 4;
-        indices.extend_from_slice(&[0, 1 + c * n + steps, 1 + next * n]);
+    let arc_vert_count = steps + 1;
+    for corner_idx in 0..4u32 {
+        let next = (corner_idx + 1) % 4;
+        indices.extend_from_slice(&[0, 1 + corner_idx * arc_vert_count + steps, 1 + next * arc_vert_count]);
     }
     let normals = vec![[0.0_f32, 0.0, 1.0]; positions.len()];
     let uvs = vec![[0.0_f32, 0.0]; positions.len()];
