@@ -64,22 +64,14 @@ impl EnemyType {
         }
     }
 
-    /// Tint color multiplied onto the sprite for level 1 bots (same sprite, visually distinct).
-    pub fn lv1_tint(&self) -> Color {
-        match self {
-            EnemyType::Frontrunner => Color::srgb(1.0, 0.45, 0.45), // hot red
-            EnemyType::Backrunner  => Color::srgb(0.75, 0.40, 1.0), // vivid purple
-            EnemyType::SandwichBot => Color::srgb(1.0, 0.65, 0.20), // deep orange
-            EnemyType::JitLp       => Color::srgb(0.35, 1.0, 1.0),  // bright cyan
-        }
-    }
 }
 
-/// Level multipliers applied on top of base stats.
-const LV1_SPEED_MULT:  f32 = 1.35;
-const LV1_HP_MULT:     f32 = 1.80;
-const LV1_DRAIN_MULT:  f32 = 1.50;
-const LV1_SIZE_MULT:   f32 = 1.20;
+/// Per-level stat multipliers: [Lv0, Lv1, Lv2, Lv3]
+const LEVEL_SPEED_MULT: [f32; 4] = [1.00, 1.35, 1.70, 2.10];
+const LEVEL_HP_MULT:    [f32; 4] = [1.00, 1.80, 3.20, 5.50];
+const LEVEL_DRAIN_MULT: [f32; 4] = [1.00, 1.50, 2.30, 3.50];
+/// Base sprite size (px) per level — matches the 1.0/1.2/1.4/1.6× visual scale.
+const LEVEL_SIZE: [f32; 4] = [48.0, 57.6, 67.2, 76.8];
 
 #[derive(Component)]
 pub struct Enemy {
@@ -100,15 +92,11 @@ impl Enemy {
     }
 
     pub fn new_leveled(enemy_type: EnemyType, level: u8) -> Self {
-        let (sm, hm, dm) = if level >= 1 {
-            (LV1_SPEED_MULT, LV1_HP_MULT, LV1_DRAIN_MULT)
-        } else {
-            (1.0, 1.0, 1.0)
-        };
-        let hp = enemy_type.max_hp() * hm;
+        let l = (level as usize).min(3);
+        let hp = enemy_type.max_hp() * LEVEL_HP_MULT[l];
         Self {
-            speed: enemy_type.move_speed() * sm,
-            drain_rate: enemy_type.drain_rate() * dm,
+            speed:        enemy_type.move_speed() * LEVEL_SPEED_MULT[l],
+            drain_rate:   enemy_type.drain_rate()  * LEVEL_DRAIN_MULT[l],
             attack_range: enemy_type.attack_range(),
             target: None,
             hp,
@@ -120,12 +108,7 @@ impl Enemy {
     }
 
     pub fn sprite_size(&self) -> f32 {
-        let base = self.enemy_type.size();
-        if self.level >= 1 { base * LV1_SIZE_MULT } else { base }
-    }
-
-    pub fn sprite_tint(&self) -> Color {
-        if self.level >= 1 { self.enemy_type.lv1_tint() } else { Color::WHITE }
+        LEVEL_SIZE[(self.level as usize).min(3)]
     }
 
     pub fn effective_speed(&self) -> f32 {

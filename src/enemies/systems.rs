@@ -148,7 +148,7 @@ pub fn setup_enemy_assets(
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut enemy_assets: ResMut<EnemyAssets>,
 ) {
-    enemy_assets.upgrade_layout       = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 2, None, None)));
+    enemy_assets.upgrade_layout       = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 4, None, None)));
     enemy_assets.frontrunner_upgrades = Some(asset_server.load("enemies/enemy_frontrunner_upgrades.png"));
     enemy_assets.backrunner_upgrades  = Some(asset_server.load("enemies/enemy_backrunner_upgrades.png"));
     enemy_assets.sandwich_upgrades    = Some(asset_server.load("enemies/enemy_sandwich_upgrades.png"));
@@ -189,12 +189,7 @@ pub fn tick_waves(
         let active = enemy_q.iter().count() as u32;
         let to_spawn = (waves.wave_target.saturating_sub(active)).min(per_tick);
         for _ in 0..to_spawn {
-            let (enemy_type, level) = if waves.lv1_remaining > 0 {
-                waves.lv1_remaining -= 1;
-                (waves.pick_lv1_enemy(), 1u8)
-            } else {
-                (waves.pick_enemy(), 0u8)
-            };
+            let (enemy_type, level) = waves.pick_spawn();
             let pos = waves.rand_spawn_pos();
             spawn_enemy(&mut commands, &enemy_assets, enemy_type, level, pos);
         }
