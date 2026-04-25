@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{towers::AnimationTimer, transactions::Transaction};
 
 use super::components::{Enemy, EnemyHpBarFg, EnemyType};
-use super::resources::{EnemyAssets, WaveManager, WaveState};
+use super::resources::{EnemyAssets, WaveManager};
 
 const BAR_W: f32 = 40.0;
 const BAR_H: f32 = 5.0;
@@ -151,41 +151,28 @@ pub fn setup_enemy_assets(
     enemy_assets.jitlp       = Some(asset_server.load("enemies/enemy_jitlp.png"));
 }
 
-/// Drive the wave state machine: countdown → spawn one-by-one → wait for clear → repeat.
+/// Every 15 s a new block arrives — build and queue the next wave unconditionally.
+/// A separate 1.2 s timer staggers individual spawns from the pending queue.
 pub fn tick_waves(
     mut commands: Commands,
     mut waves: ResMut<WaveManager>,
     enemy_assets: Res<EnemyAssets>,
-    enemy_q: Query<&Enemy>,
     time: Res<Time>,
 ) {
-    match waves.state {
-        WaveState::Countdown => {
-            waves.between_timer.tick(time.delta());
-            if waves.between_timer.just_finished() {
-                waves.build_wave();
-                waves.state = WaveState::Spawning;
-                waves.spawn_timer.reset();
-            }
-        }
-        WaveState::Spawning => {
-            waves.spawn_timer.tick(time.delta());
-            if waves.spawn_timer.just_finished() {
-                if let Some(enemy_type) = waves.pending.pop_front() {
-                    let pos = waves.rand_spawn_pos();
-                    spawn_enemy(&mut commands, &enemy_assets, enemy_type, pos);
-                }
-                if waves.pending.is_empty() {
-                    waves.state = WaveState::WaitForClear;
-                }
-            }
-        }
-        WaveState::WaitForClear => {
-            if enemy_q.is_empty() {
-                waves.state = WaveState::Countdown;
-                let pause = if waves.wave >= 3 { 6.0 } else { 8.0 };
-                waves.between_timer = Timer::from_seconds(pause, TimerMode::Once);
-            }
+    let delta = time.delta();
+
+    // New block: queue next wave regardless of surviving enemies
+    waves.block_timer.tick(delta);
+    if waves.block_timer.just_finished() {
+        waves.build_wave();
+    }
+
+    // Stagger individual spawns from the pending queue
+    waves.spawn_timer.tick(delta);
+    if waves.spawn_timer.just_finished() {
+        if let Some(enemy_type) = waves.pending.pop_front() {
+            let pos = waves.rand_spawn_pos();
+            spawn_enemy(&mut commands, &enemy_assets, enemy_type, pos);
         }
     }
 }

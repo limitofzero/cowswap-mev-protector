@@ -23,18 +23,12 @@ impl EnemyAssets {
     }
 }
 
-#[derive(PartialEq, Eq)]
-pub enum WaveState {
-    Countdown,
-    Spawning,
-    WaitForClear,
-}
-
 #[derive(Resource)]
 pub struct WaveManager {
     pub wave: u32,
-    pub state: WaveState,
-    pub between_timer: Timer,
+    /// Fires every 15 s (Ethereum block time) — triggers the next wave unconditionally.
+    pub block_timer: Timer,
+    /// Staggers individual enemy spawns within a wave.
     pub spawn_timer: Timer,
     pub pending: std::collections::VecDeque<EnemyType>,
     seed: u64,
@@ -44,8 +38,7 @@ impl Default for WaveManager {
     fn default() -> Self {
         Self {
             wave: 0,
-            state: WaveState::Countdown,
-            between_timer: Timer::from_seconds(4.0, TimerMode::Once),
+            block_timer: Timer::from_seconds(15.0, TimerMode::Repeating),
             spawn_timer: Timer::from_seconds(1.2, TimerMode::Repeating),
             pending: Default::default(),
             seed: 0xfeed_face_dead_beef,

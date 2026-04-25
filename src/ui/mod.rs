@@ -3,6 +3,7 @@ use crate::utils::make_rounded_rect;
 use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
 
 use crate::{
+    enemies::resources::WaveManager,
     game::GameState,
     resources::{GameEconomy, GameScore, PlacementMode, COW_USD_RATE},
     towers::{Tower, TowerShopButton, TowerType},
@@ -45,7 +46,7 @@ const TOOLTIP_W: f32 = 220.0;
 const TOOLTIP_H: f32 = 82.0;
 
 #[derive(Clone, Copy)]
-pub enum StatKind { Settled, Protected, Extracted, Balance }
+pub enum StatKind { Block, Settled, Protected, Extracted, Balance }
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
@@ -77,10 +78,11 @@ fn setup_world_ui(
     ));
 
     let stats = [
-        (StatKind::Settled,   "Settled: 0",       Color::WHITE,                      -420.0_f32),
-        (StatKind::Protected, "Protected: 0 COW", Color::srgb(0.30, 1.00, 0.45),    -180.0),
-        (StatKind::Extracted, "Extracted: 0 COW", Color::srgb(1.00, 0.35, 0.35),      80.0),
-        (StatKind::Balance,   "Balance: 300 COW", Color::srgb(0.80, 0.65, 1.00),     340.0),
+        (StatKind::Block,     "Block #0",          Color::srgb(0.55, 0.85, 1.00),    -560.0_f32),
+        (StatKind::Settled,   "Settled: 0",        Color::WHITE,                      -380.0),
+        (StatKind::Protected, "Protected: 0 COW",  Color::srgb(0.30, 1.00, 0.45),    -140.0),
+        (StatKind::Extracted, "Extracted: 0 COW",  Color::srgb(1.00, 0.35, 0.35),     110.0),
+        (StatKind::Balance,   "Balance: 300 COW",  Color::srgb(0.80, 0.65, 1.00),     360.0),
     ];
     for (kind, text, color, x) in stats {
         commands.spawn((
@@ -270,11 +272,13 @@ fn reposition_ui(
 fn update_stats(
     score: Res<GameScore>,
     economy: Res<GameEconomy>,
+    waves: Res<WaveManager>,
     mut q: Query<(&StatText, &mut Text2d)>,
 ) {
-    if !score.is_changed() && !economy.is_changed() { return; }
+    if !score.is_changed() && !economy.is_changed() && !waves.is_changed() { return; }
     for (stat, mut text) in &mut q {
         text.0 = match stat.0 {
+            StatKind::Block     => format!("Block #{}", waves.wave),
             StatKind::Settled   => format!("Settled: {}", score.txs_settled),
             StatKind::Protected => format!("Protected: {}", fmt_usd(score.value_protected * COW_USD_RATE)),
             StatKind::Extracted => format!("Extracted: {}", fmt_usd(score.value_extracted * COW_USD_RATE)),
