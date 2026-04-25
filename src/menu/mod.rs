@@ -20,6 +20,8 @@ const BTN_Y:   f32 = -120.0;
 #[derive(Component)] struct MenuOverlay;
 #[derive(Component)] struct MenuProceedBtn;
 #[derive(Component)] struct MenuBtnLabel;
+/// Marks standalone enemy icon sprites — toggled alongside the overlay.
+#[derive(Component)] struct MenuIcon;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
@@ -40,6 +42,8 @@ fn setup_menu(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let border = meshes.add(make_rounded_rect(PANEL_W, PANEL_H, 12.0, 10));
     let fill   = meshes.add(make_rounded_rect(PANEL_W - 4.0, PANEL_H - 4.0, 11.0, 10));
@@ -96,16 +100,16 @@ fn setup_menu(
             Transform::from_xyz(0.0, 132.0, 1.0),
         ));
 
-        // Enemy rows: colored name inline with gray description via TextSpan
+        // Enemy rows: name + description (icons spawned as standalone entities below)
         let row_start_y = 105.0_f32;
-        let row_step    = 28.0_f32;
+        let row_step    = 30.0_f32;
         for (i, (enemy_type, name, desc)) in enemies.iter().enumerate() {
             let y = row_start_y - i as f32 * row_step;
             p.spawn((
                 Text2d::new(*name),
                 TextFont { font_size: 11.0, ..default() },
                 TextColor(enemy_type.color()),
-                Transform::from_xyz(0.0, y, 1.0),
+                Transform::from_xyz(10.0, y, 1.0),
             )).with_children(|pp| {
                 pp.spawn((
                     TextSpan::new(*desc),
@@ -159,6 +163,33 @@ fn setup_menu(
             MenuBtnLabel,
         ));
     });
+
+    // Load icon textures directly — don't rely on EnemyAssets which may not be populated yet
+    let icon_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None));
+    let icon_images: [Handle<Image>; 4] = [
+        asset_server.load("enemies/enemy_frontrunner.png"),
+        asset_server.load("enemies/enemy_backrunner.png"),
+        asset_server.load("enemies/enemy_sandwich.png"),
+        asset_server.load("enemies/enemy_jitlp.png"),
+    ];
+
+    let row_start_y = 105.0_f32;
+    let row_step    = 30.0_f32;
+    for (i, _) in enemies.iter().enumerate() {
+        let world_y = row_start_y - i as f32 * row_step;
+        commands.spawn((
+            Sprite {
+                image: icon_images[i].clone(),
+                texture_atlas: Some(TextureAtlas { layout: icon_layout.clone(), index: 0 }),
+                custom_size: Some(Vec2::splat(26.0)),
+                ..default()
+            },
+            Transform::from_xyz(-256.0, world_y, PANEL_Z + 2.0),
+            Visibility::Visible,
+            MenuIcon,
+            Name::new("MenuIcon"),
+        ));
+    }
 }
 
 /// Show the overlay when in Menu state or when paused; hide otherwise.
@@ -166,9 +197,13 @@ fn update_menu_visibility(
     state: Res<State<GameState>>,
     pause: Res<PauseState>,
     mut overlay_q: Query<&mut Visibility, With<MenuOverlay>>,
+    mut icon_q: Query<&mut Visibility, (With<MenuIcon>, Without<MenuOverlay>)>,
 ) {
     let should_show = *state == GameState::Menu || pause.paused;
     for mut vis in &mut overlay_q {
+        *vis = if should_show { Visibility::Visible } else { Visibility::Hidden };
+    }
+    for mut vis in &mut icon_q {
         *vis = if should_show { Visibility::Visible } else { Visibility::Hidden };
     }
 }

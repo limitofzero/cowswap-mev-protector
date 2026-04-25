@@ -15,10 +15,7 @@ impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<resources::EnemyAssets>()
             .init_resource::<resources::WaveManager>()
-            .add_systems(
-                OnEnter(GameState::Playing),
-                systems::setup_enemy_assets,
-            )
+            .add_systems(Startup, systems::setup_enemy_assets)
             .add_systems(
                 Update,
                 (
