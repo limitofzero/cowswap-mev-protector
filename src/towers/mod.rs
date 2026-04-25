@@ -14,10 +14,8 @@ pub struct TowerPlugin;
 impl Plugin for TowerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<resources::TowerAssets>()
-            .add_systems(
-            OnEnter(GameState::Playing),
-            systems::spawn_initial_towers,
-        )
+            .add_systems(Startup, systems::setup_tower_assets)
+            .add_systems(OnEnter(GameState::Playing), systems::spawn_initial_towers)
         .add_systems(
             Update,
             (

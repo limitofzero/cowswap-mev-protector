@@ -86,6 +86,16 @@ impl TowerType {
         }
     }
 
+    pub fn short_label(&self) -> &'static str {
+        match self {
+            TowerType::BatchAuctioneer => "BA",
+            TowerType::CoWMatcher      => "CoW",
+            TowerType::Solver          => "SLV",
+            TowerType::SlippageGuard   => "SG",
+            TowerType::DarkPoolNode    => "DP",
+        }
+    }
+
     pub fn cost(&self) -> f32 {
         match self {
             TowerType::BatchAuctioneer => 150.0,

@@ -182,37 +182,22 @@ pub fn animate_sprites(
 }
 
 
-/// Spawn a starter set of towers for the demo scene.
-pub fn spawn_initial_towers(
-    mut commands: Commands,
+/// Load all tower sprite sheet handles into TowerAssets. Runs at Startup so
+/// OnEnter(Playing) systems can rely on the handles being populated.
+pub fn setup_tower_assets(
     asset_server: Res<AssetServer>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     mut tower_assets: ResMut<TowerAssets>,
 ) {
-    // Rails sit at y = ±170.  Tower ranges are 75-130 px, so towers must be within
-    // that distance of a rail to cover it.  Stagger between-rail towers near the
-    // top or bottom rail; place outside towers just beyond each rail edge.
-    let layout: &[(TowerType, Vec2)] = &[
-        (TowerType::CoWMatcher,      Vec2::new(-380.0,  90.0)),  // near top rail   (gap 80 < 110)
-        (TowerType::BatchAuctioneer, Vec2::new( -80.0, -65.0)),  // near bottom rail (gap 105 < 130)
-        (TowerType::DarkPoolNode,    Vec2::new( 220.0, 100.0)),  // near top rail   (gap 70 < 75)
-        (TowerType::Solver,          Vec2::new(-200.0, 240.0)),  // outside top rail (gap 70 < 85)
-        (TowerType::SlippageGuard,   Vec2::new(-200.0,-245.0)),  // outside bottom rail (gap 75 < 95)
-    ];
-
-    // Load sprite sheets
-    let anim_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 6, 5, None, None));
+    let anim_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 6, 5, None, None));
     let ghost_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 5, 1, None, None));
     let icon_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(46, 59),  5, 1, None, None));
+    let proj_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(48), 6, 1, None, None));
+    let hit_layout   = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(80), 8, 1, None, None));
 
-    let proj_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(48), 6, 1, None, None));
-    let hit_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(80), 8, 1, None, None));
-
-    tower_assets.anim_layout  = Some(anim_layout.clone());
-    tower_assets.ghost_layout = Some(ghost_layout.clone());
-    tower_assets.icon_layout  = Some(icon_layout.clone());
+    tower_assets.anim_layout  = Some(anim_layout);
+    tower_assets.ghost_layout = Some(ghost_layout);
+    tower_assets.icon_layout  = Some(icon_layout);
     tower_assets.proj_layout  = Some(proj_layout);
     tower_assets.hit_layout   = Some(hit_layout);
     tower_assets.anim_sheet   = Some(asset_server.load("towers/cowswap_towers_anim.png"));
@@ -221,6 +206,24 @@ pub fn spawn_initial_towers(
     tower_assets.delete_icon  = Some(asset_server.load("towers/tower_delete.png"));
     tower_assets.proj_sheet   = Some(asset_server.load("towers/solver_projectile.png"));
     tower_assets.hit_sheet    = Some(asset_server.load("towers/solver_hit.png"));
+}
+
+/// Spawn a starter set of towers for the demo scene.
+pub fn spawn_initial_towers(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    tower_assets: Res<TowerAssets>,
+) {
+    let layout: &[(TowerType, Vec2)] = &[
+        (TowerType::CoWMatcher,      Vec2::new(-380.0,  90.0)),
+        (TowerType::BatchAuctioneer, Vec2::new( -80.0, -65.0)),
+        (TowerType::DarkPoolNode,    Vec2::new( 220.0, 100.0)),
+        (TowerType::Solver,          Vec2::new(-200.0, 240.0)),
+        (TowerType::SlippageGuard,   Vec2::new(-200.0,-245.0)),
+    ];
+
+    let anim_layout = tower_assets.anim_layout.clone().unwrap();
 
     for (tower_type, pos) in layout {
         let color = tower_type.color();

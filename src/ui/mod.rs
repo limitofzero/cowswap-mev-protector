@@ -10,14 +10,16 @@ use crate::{
 
 pub struct UiPlugin;
 
-const BAR_H: f32 = 34.0;
+const TOP_BAR_H: f32 = 34.0;
+const BOT_BAR_H: f32 = 96.0;
+const BAR_H: f32 = TOP_BAR_H; // kept for hit-test compat in other systems
 const BAR_Z: f32 = 90.0;
-const BTN_W: f32 = 120.0;
-const BTN_H: f32 = 32.0;
-const BTN_ICON_ZONE: f32 = 28.0;
-const BTN_ICON_W: f32 = 20.0;
-const BTN_ICON_H: f32 = 26.0;
-const BTN_GAP: f32 = 12.0;
+const BTN_W: f32 = 148.0;
+const BTN_H: f32 = 74.0;
+const BTN_CORNER: f32 = 10.0;
+const BTN_ICON_W: f32 = 28.0;
+const BTN_ICON_H: f32 = 36.0;
+const BTN_GAP: f32 = 14.0;
 const SHOP_TOWERS: [TowerType; 5] = [
     TowerType::BatchAuctioneer,
     TowerType::CoWMatcher,
@@ -36,6 +38,8 @@ const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 #[derive(Component)] pub struct RemoveBtn;
 #[derive(Component)] struct TooltipPanel;
 #[derive(Component)] struct TooltipContent;
+/// Drives the press-and-release scale animation; removed when animation completes.
+#[derive(Component)] struct BtnClickEffect(f32);
 
 const TOOLTIP_W: f32 = 220.0;
 const TOOLTIP_H: f32 = 82.0;
@@ -48,7 +52,7 @@ impl Plugin for UiPlugin {
         app.add_systems(OnEnter(GameState::Playing), setup_world_ui)
             .add_systems(
                 Update,
-                (reposition_ui, update_stats, handle_shop_click, update_tooltip)
+                (reposition_ui, update_stats, handle_shop_click, update_tooltip, animate_btn_click)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -93,7 +97,7 @@ fn setup_world_ui(
     commands.spawn((
         Sprite {
             color: Color::srgba(0.04, 0.02, 0.12, 0.92),
-            custom_size: Some(Vec2::new(9999.0, BAR_H)),
+            custom_size: Some(Vec2::new(9999.0, BOT_BAR_H)),
             ..default()
         },
         Transform::from_xyz(0.0, 0.0, BAR_Z),
@@ -101,30 +105,27 @@ fn setup_world_ui(
         Name::new("BottomBarBg"),
     ));
 
-    // "BUILD" label — left of the first button
-    let first_btn_x = btn_x(0);
-    commands.spawn((
-        Text2d::new("BUILD"),
-        TextFont { font_size: 11.0, ..default() },
-        TextColor(Color::srgb(0.5, 0.5, 0.5)),
-        Transform::from_xyz(first_btn_x - BTN_W * 0.5 - 36.0, 0.0, BAR_Z + 1.0),
-        BottomBar,
-    ));
+    // Pre-build shared mesh handles (one set per button, reused across loop)
+    let border_mesh = meshes.add(make_rounded_rect(BTN_W,       BTN_H,       BTN_CORNER,       10));
+    let fill_mesh   = meshes.add(make_rounded_rect(BTN_W - 4.0, BTN_H - 4.0, BTN_CORNER - 1.0, 10));
 
-    // Shop buttons — parent entity holds background; icon + label are children
+    // Shop buttons
     for (idx, tower) in SHOP_TOWERS.iter().enumerate() {
         let x = btn_x(idx);
         let color = tower.color();
         let c = color.to_srgba();
-        // All buttons have icons now (one sheet, one index per tower)
-        let label_local_x = -BTN_W * 0.5 + BTN_ICON_ZONE + (BTN_W - BTN_ICON_ZONE) * 0.5;
+
+        let col_border = materials.add(ColorMaterial {
+            color: Color::srgba(c.red, c.green, c.blue, 0.90),
+            alpha_mode: AlphaMode2d::Blend, ..default()
+        });
+        let col_fill = materials.add(ColorMaterial {
+            color: Color::srgba(c.red * 0.12, c.green * 0.12, c.blue * 0.12, 0.97),
+            alpha_mode: AlphaMode2d::Blend, ..default()
+        });
 
         let mut btn = commands.spawn((
-            Sprite {
-                color: Color::srgba(c.red * 0.2, c.green * 0.2, c.blue * 0.2, 0.95),
-                custom_size: Some(Vec2::new(BTN_W, BTN_H)),
-                ..default()
-            },
+            Sprite { color: Color::NONE, custom_size: Some(Vec2::new(BTN_W, BTN_H)), ..default() },
             Transform::from_xyz(x, 0.0, BAR_Z + 1.0),
             BottomBar,
             ShopBtn { tower: tower.clone() },
@@ -133,7 +134,10 @@ fn setup_world_ui(
         ));
 
         btn.with_children(|p| {
-            // Icon from shared sheet
+            p.spawn((Mesh2d(border_mesh.clone()), MeshMaterial2d(col_border), Transform::from_xyz(0.0, 0.0, 0.0)));
+            p.spawn((Mesh2d(fill_mesh.clone()),   MeshMaterial2d(col_fill),   Transform::from_xyz(0.0, 0.0, 0.05)));
+
+            // Icon — left side, vertically centered
             if let (Some(sheet), Some(layout)) = (tower_assets.icon_sheet.clone(), tower_assets.icon_layout.clone()) {
                 p.spawn((
                     Sprite {
@@ -142,50 +146,62 @@ fn setup_world_ui(
                         custom_size: Some(Vec2::new(BTN_ICON_W, BTN_ICON_H)),
                         ..default()
                     },
-                    Transform::from_xyz(-BTN_W * 0.5 + BTN_ICON_ZONE * 0.5, 0.0, 1.0),
+                    Transform::from_xyz(-BTN_W * 0.5 + BTN_ICON_W * 0.5 + 10.0, 0.0, 1.0),
                 ));
             }
 
-            // Label — centered in text zone
+            // Short name — centered in button
             p.spawn((
-                Text2d::new(format!("{} {:.0}c", tower.label(), tower.cost())),
-                TextFont { font_size: 10.0, ..default() },
+                Text2d::new(tower.short_label()),
+                TextFont { font_size: 15.0, ..default() },
                 TextColor(color),
-                Transform::from_xyz(label_local_x, 0.0, 1.0),
+                Transform::from_xyz(0.0, 10.0, 1.0),
+            ));
+            // Cost — centered below name
+            p.spawn((
+                Text2d::new(format!("{:.0} CoW", tower.cost())),
+                TextFont { font_size: 11.0, ..default() },
+                TextColor(Color::srgb(0.70, 0.70, 0.70)),
+                Transform::from_xyz(0.0, -10.0, 1.0),
             ));
         });
     }
 
-    // Remove button (index = last slot) — same layout as tower buttons
+    // Remove button
     let remove_x = btn_x(SHOP_TOWERS.len());
-    let label_local_x = -BTN_W * 0.5 + BTN_ICON_ZONE + (BTN_W - BTN_ICON_ZONE) * 0.5;
+    let col_rm_border = materials.add(ColorMaterial {
+        color: Color::srgba(0.85, 0.25, 0.25, 0.90), alpha_mode: AlphaMode2d::Blend, ..default()
+    });
+    let col_rm_fill = materials.add(ColorMaterial {
+        color: Color::srgba(0.15, 0.03, 0.03, 0.97), alpha_mode: AlphaMode2d::Blend, ..default()
+    });
     let mut remove_btn = commands.spawn((
-        Sprite {
-            color: Color::srgba(0.55, 0.08, 0.08, 0.95),
-            custom_size: Some(Vec2::new(BTN_W, BTN_H)),
-            ..default()
-        },
+        Sprite { color: Color::NONE, custom_size: Some(Vec2::new(BTN_W, BTN_H)), ..default() },
         Transform::from_xyz(remove_x, 0.0, BAR_Z + 1.0),
         BottomBar,
         RemoveBtn,
         Name::new("RemoveBtn"),
     ));
     remove_btn.with_children(|p| {
+        p.spawn((Mesh2d(border_mesh.clone()), MeshMaterial2d(col_rm_border), Transform::from_xyz(0.0, 0.0, 0.0)));
+        p.spawn((Mesh2d(fill_mesh.clone()),   MeshMaterial2d(col_rm_fill),   Transform::from_xyz(0.0, 0.0, 0.05)));
         if let Some(icon) = tower_assets.delete_icon.clone() {
             p.spawn((
-                Sprite {
-                    image: icon,
-                    custom_size: Some(Vec2::new(BTN_ICON_W, BTN_ICON_H)),
-                    ..default()
-                },
-                Transform::from_xyz(-BTN_W * 0.5 + BTN_ICON_ZONE * 0.5, 0.0, 1.0),
+                Sprite { image: icon, custom_size: Some(Vec2::new(BTN_ICON_W, BTN_ICON_H)), ..default() },
+                Transform::from_xyz(-BTN_W * 0.5 + BTN_ICON_W * 0.5 + 10.0, 0.0, 1.0),
             ));
         }
         p.spawn((
-            Text2d::new(format!("Remove -{:.0}c", REMOVE_COST)),
-            TextFont { font_size: 10.0, ..default() },
-            TextColor(Color::srgb(1.0, 0.65, 0.65)),
-            Transform::from_xyz(label_local_x, 0.0, 1.0),
+            Text2d::new("RMV"),
+            TextFont { font_size: 15.0, ..default() },
+            TextColor(Color::srgb(1.0, 0.55, 0.55)),
+            Transform::from_xyz(0.0, 10.0, 1.0),
+        ));
+        p.spawn((
+            Text2d::new(format!("-{:.0} CoW", REMOVE_COST)),
+            TextFont { font_size: 11.0, ..default() },
+            TextColor(Color::srgb(0.70, 0.70, 0.70)),
+            Transform::from_xyz(0.0, -10.0, 1.0),
         ));
     });
 
@@ -195,7 +211,7 @@ fn setup_world_ui(
     let fill_mesh   = meshes.add(make_rounded_rect(TOOLTIP_W - 4.0, TOOLTIP_H - 4.0, CR - 1.0, 8));
     commands.spawn((
         Sprite { color: Color::NONE, custom_size: Some(Vec2::new(TOOLTIP_W, TOOLTIP_H)), ..default() },
-        Transform::from_xyz(0.0, -9999.0, 88.0),
+        Transform::from_xyz(0.0, -9999.0, BAR_Z + 3.0),
         Visibility::Hidden,
         TooltipPanel,
         Name::new("Tooltip"),
@@ -227,16 +243,8 @@ fn setup_world_ui(
         ));
     });
 
-    // Cancel hint — right of the last button
-    let last_btn_x = btn_x(TOTAL_BTN_COUNT - 1);
-    commands.spawn((
-        Text2d::new("RMB/Esc: cancel"),
-        TextFont { font_size: 10.0, ..default() },
-        TextColor(Color::srgb(0.4, 0.4, 0.4)),
-        Transform::from_xyz(last_btn_x + BTN_W * 0.5 + 42.0, 0.0, BAR_Z + 1.0),
-        BottomBar,
-    ));
 }
+
 
 fn btn_x(idx: usize) -> f32 {
     let n = TOTAL_BTN_COUNT as f32;
@@ -252,8 +260,8 @@ fn reposition_ui(
 ) {
     let Ok(win) = windows.single() else { return };
     let half_h = win.height() * 0.5;
-    let top_y = half_h - BAR_H * 0.5;
-    let bot_y = -half_h + BAR_H * 0.5;
+    let top_y = half_h - TOP_BAR_H * 0.5;
+    let bot_y = -half_h + BOT_BAR_H * 0.5;
 
     for mut t in &mut top_q { t.translation.y = top_y; }
     for mut t in &mut bot_q { t.translation.y = bot_y; }
@@ -277,11 +285,12 @@ fn update_stats(
 
 /// Click on a shop button in world space → enter placement/remove mode.
 pub fn handle_shop_click(
+    mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    btn_q: Query<(&ShopBtn, &Transform)>,
-    remove_btn_q: Query<&Transform, With<RemoveBtn>>,
+    btn_q: Query<(Entity, &ShopBtn, &Transform)>,
+    remove_btn_q: Query<(Entity, &Transform), With<RemoveBtn>>,
     mut placement_mode: ResMut<PlacementMode>,
     economy: Res<GameEconomy>,
 ) {
@@ -292,13 +301,16 @@ pub fn handle_shop_click(
     let Ok(world_pos) = cam.viewport_to_world_2d(cam_t, cursor) else { return };
 
     let half_h = win.height() * 0.5;
-    let bot_y = -half_h + BAR_H * 0.5;
+    let bot_y = -half_h + BOT_BAR_H * 0.5;
 
-    if (world_pos.y - bot_y).abs() > BAR_H * 0.5 + 4.0 { return; }
+    if (world_pos.y - bot_y).abs() > BOT_BAR_H * 0.5 + 4.0 { return; }
 
     // Tower buttons
-    for (btn, btn_t) in &btn_q {
-        if (world_pos.x - btn_t.translation.x).abs() <= BTN_W * 0.5 {
+    for (entity, btn, btn_t) in &btn_q {
+        if (world_pos.x - btn_t.translation.x).abs() <= BTN_W * 0.5
+            && (world_pos.y - bot_y).abs() <= BTN_H * 0.5
+        {
+            commands.entity(entity).insert(BtnClickEffect(0.0));
             if economy.balance >= btn.tower.cost() {
                 *placement_mode = PlacementMode::Placing(btn.tower.clone());
             }
@@ -307,8 +319,11 @@ pub fn handle_shop_click(
     }
 
     // Remove button — toggle
-    if let Ok(t) = remove_btn_q.single() {
-        if (world_pos.x - t.translation.x).abs() <= BTN_W * 0.5 {
+    if let Ok((entity, t)) = remove_btn_q.single() {
+        if (world_pos.x - t.translation.x).abs() <= BTN_W * 0.5
+            && (world_pos.y - bot_y).abs() <= BTN_H * 0.5
+        {
+            commands.entity(entity).insert(BtnClickEffect(0.0));
             *placement_mode = if *placement_mode == PlacementMode::Removing {
                 PlacementMode::Idle
             } else {
@@ -318,8 +333,28 @@ pub fn handle_shop_click(
         }
     }
 
-    // Click on bar but not any button — cancel current mode
     *placement_mode = PlacementMode::Idle;
+}
+
+fn animate_btn_click(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut btn_q: Query<(Entity, &mut Transform, &mut BtnClickEffect)>,
+) {
+    for (entity, mut t, mut effect) in &mut btn_q {
+        effect.0 += time.delta_secs() / 0.14;
+        // Press down (0→0.5) then spring back (0.5→1.0)
+        let s = if effect.0 < 0.5 {
+            1.0 - effect.0 * 0.18
+        } else {
+            0.91 + (effect.0 - 0.5) * 0.18
+        };
+        t.scale = Vec3::splat(s.clamp(0.91, 1.0));
+        if effect.0 >= 1.0 {
+            t.scale = Vec3::ONE;
+            commands.entity(entity).remove::<BtnClickEffect>();
+        }
+    }
 }
 
 fn update_tooltip(
@@ -343,7 +378,7 @@ fn update_tooltip(
 
     let half_w = win.width()  * 0.5;
     let half_h = win.height() * 0.5;
-    let bot_y  = -half_h + BAR_H * 0.5;
+    let bot_y  = -half_h + BOT_BAR_H * 0.5;
 
     let tower_hit = tower_q.iter()
         .find(|(_, t)| t.translation.truncate().distance(cursor) < 42.0)
@@ -352,7 +387,7 @@ fn update_tooltip(
     let btn_hit = btn_q.iter()
         .find(|(_, t)| {
             (cursor.x - t.translation.x).abs() <= BTN_W * 0.5
-                && (cursor.y - bot_y).abs() <= BAR_H * 0.5 + 4.0
+                && (cursor.y - bot_y).abs() <= BOT_BAR_H * 0.5 + 4.0
         })
         .map(|(btn, t)| (btn.tower.clone(), Vec2::new(t.translation.x, bot_y)));
 
@@ -361,11 +396,11 @@ fn update_tooltip(
         return;
     };
 
-    // Buttons sit on the bottom bar; towers are mid-screen sprites (110 px tall, half = 55).
-    let v_offset = if (anchor.y - bot_y).abs() < BAR_H {
-        BAR_H * 0.5 + 6.0 + TOOLTIP_H * 0.5   // just above the bar
+    // Buttons: tooltip appears above the bottom bar. Towers: above the sprite.
+    let v_offset = if (anchor.y - bot_y).abs() < BOT_BAR_H {
+        BOT_BAR_H * 0.5 + 8.0 + TOOLTIP_H * 0.5   // clear the taller bar
     } else {
-        55.0 + 6.0 + TOOLTIP_H * 0.5           // just above the tower sprite
+        55.0 + 8.0 + TOOLTIP_H * 0.5               // just above the tower sprite
     };
     let tx = anchor.x.clamp(-half_w + TOOLTIP_W * 0.5 + 4.0, half_w - TOOLTIP_W * 0.5 - 4.0);
     let ty = (anchor.y + v_offset)
