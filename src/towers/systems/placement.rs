@@ -43,7 +43,10 @@ pub(super) fn is_valid_placement<F: QueryFilter>(
 }
 
 pub(super) fn spawn_range_visuals(
-    children: &mut bevy::ecs::relationship::RelatedSpawnerCommands<'_, bevy::ecs::hierarchy::ChildOf>,
+    children: &mut bevy::ecs::relationship::RelatedSpawnerCommands<
+        '_,
+        bevy::ecs::hierarchy::ChildOf,
+    >,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ColorMaterial>,
     range: f32,
@@ -254,7 +257,10 @@ pub fn handle_placement_click(
     }
 
     // Don't place when clicking a UI button
-    if ui_buttons.iter().any(|interaction| *interaction == Interaction::Pressed) {
+    if ui_buttons
+        .iter()
+        .any(|interaction| *interaction == Interaction::Pressed)
+    {
         return;
     }
 

@@ -32,7 +32,9 @@ pub fn find_enemy_targets(
         .iter()
         .filter_map(|(enemy, _)| {
             let target_entity = enemy.target?;
-            let still_valid = tx_query.get(target_entity).is_ok_and(|(_, tx, _)| !tx.is_immune());
+            let still_valid = tx_query
+                .get(target_entity)
+                .is_ok_and(|(_, tx, _)| !tx.is_immune());
             still_valid.then_some(target_entity)
         })
         .collect();
@@ -55,7 +57,11 @@ pub fn find_enemy_targets(
                 }
                 Some((entity, pos.distance(tx_transform.translation.truncate())))
             })
-            .min_by(|lhs, rhs| lhs.1.partial_cmp(&rhs.1).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|lhs, rhs| {
+                lhs.1
+                    .partial_cmp(&rhs.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|(entity, _)| entity);
 
         if let Some(target_entity) = enemy.target {

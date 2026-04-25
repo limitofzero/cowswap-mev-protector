@@ -238,7 +238,12 @@ fn setup_world_ui(
             ..default()
         });
         let col_fill = materials.add(ColorMaterial {
-            color: Color::srgba(srgba.red * 0.12, srgba.green * 0.12, srgba.blue * 0.12, 0.97),
+            color: Color::srgba(
+                srgba.red * 0.12,
+                srgba.green * 0.12,
+                srgba.blue * 0.12,
+                0.97,
+            ),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         });

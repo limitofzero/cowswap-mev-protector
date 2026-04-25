@@ -56,7 +56,9 @@ pub fn tick_towers(
             TowerType::BatchAuctioneer => {
                 let batch_size = tx_query
                     .iter()
-                    .filter(|(_, transform)| tower_pos.distance(transform.translation.truncate()) <= range)
+                    .filter(|(_, transform)| {
+                        tower_pos.distance(transform.translation.truncate()) <= range
+                    })
                     .count() as u32;
                 if batch_size == 0 {
                     continue;
@@ -79,7 +81,9 @@ pub fn tick_towers(
             TowerType::Solver => {
                 let target = enemy_query
                     .iter()
-                    .filter(|(_, _, transform)| tower_pos.distance(transform.translation.truncate()) <= range)
+                    .filter(|(_, _, transform)| {
+                        tower_pos.distance(transform.translation.truncate()) <= range
+                    })
                     .min_by(|lhs, rhs| {
                         tower_pos
                             .distance(lhs.2.translation.truncate())

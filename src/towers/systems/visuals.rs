@@ -53,8 +53,9 @@ pub fn update_tower_range_visibility(
         });
 
     for (tower_t, children) in &tower_q {
-        let hovered = cursor
-            .is_some_and(|cursor_pos| cursor_pos.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
+        let hovered = cursor.is_some_and(|cursor_pos| {
+            cursor_pos.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS
+        });
         for &child in children {
             if let Ok(mut vis) = visual_q.get_mut(child) {
                 *vis = if hovered {
@@ -124,8 +125,9 @@ pub fn update_upgrade_preview(
         });
 
     for (tower, tower_t, children) in &tower_q {
-        let hovered = cursor
-            .is_some_and(|cursor_pos| cursor_pos.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
+        let hovered = cursor.is_some_and(|cursor_pos| {
+            cursor_pos.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS
+        });
         let can_afford = tower.can_upgrade()
             && economy.balance >= tower.tower_type.upgrade_cost(tower.upgrade_level);
 

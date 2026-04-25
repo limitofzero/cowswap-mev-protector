@@ -22,7 +22,11 @@ pub fn make_rounded_rect(width: f32, height: f32, radius: f32, steps: u32) -> Me
         let base = positions.len() as u32;
         for step in 0..=steps {
             let angle = start + (step as f32 / steps as f32) * FRAC_PI_2;
-            positions.push([cx + arc_radius * angle.cos(), cy + arc_radius * angle.sin(), 0.0]);
+            positions.push([
+                cx + arc_radius * angle.cos(),
+                cy + arc_radius * angle.sin(),
+                0.0,
+            ]);
         }
         for step in 0..steps {
             indices.extend_from_slice(&[0, base + step, base + step + 1]);
@@ -32,7 +36,11 @@ pub fn make_rounded_rect(width: f32, height: f32, radius: f32, steps: u32) -> Me
     let arc_vert_count = steps + 1;
     for corner_idx in 0..4u32 {
         let next = (corner_idx + 1) % 4;
-        indices.extend_from_slice(&[0, 1 + corner_idx * arc_vert_count + steps, 1 + next * arc_vert_count]);
+        indices.extend_from_slice(&[
+            0,
+            1 + corner_idx * arc_vert_count + steps,
+            1 + next * arc_vert_count,
+        ]);
     }
     let normals = vec![[0.0_f32, 0.0, 1.0]; positions.len()];
     let uvs = vec![[0.0_f32, 0.0]; positions.len()];

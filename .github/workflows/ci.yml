@@ -16,8 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -27,8 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
       - uses: actions/cache@v5
         with:
           path: |
