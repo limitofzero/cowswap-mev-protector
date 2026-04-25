@@ -45,16 +45,16 @@ pub fn update_tower_range_visibility(
         .single()
         .ok()
         .and_then(|w| w.cursor_position())
-        .and_then(|c| {
+        .and_then(|screen_pos| {
             camera_q
                 .single()
                 .ok()
-                .and_then(|(cam, cam_t)| cam.viewport_to_world_2d(cam_t, c).ok())
+                .and_then(|(cam, cam_t)| cam.viewport_to_world_2d(cam_t, screen_pos).ok())
         });
 
     for (tower_t, children) in &tower_q {
         let hovered = cursor
-            .is_some_and(|c| c.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
+            .is_some_and(|cursor_pos| cursor_pos.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
         for &child in children {
             if let Ok(mut vis) = visual_q.get_mut(child) {
                 *vis = if hovered {
@@ -116,16 +116,16 @@ pub fn update_upgrade_preview(
         .single()
         .ok()
         .and_then(|w| w.cursor_position())
-        .and_then(|c| {
+        .and_then(|screen_pos| {
             camera_q
                 .single()
                 .ok()
-                .and_then(|(cam, cam_t)| cam.viewport_to_world_2d(cam_t, c).ok())
+                .and_then(|(cam, cam_t)| cam.viewport_to_world_2d(cam_t, screen_pos).ok())
         });
 
     for (tower, tower_t, children) in &tower_q {
         let hovered = cursor
-            .is_some_and(|c| c.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
+            .is_some_and(|cursor_pos| cursor_pos.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
         let can_afford = tower.can_upgrade()
             && economy.balance >= tower.tower_type.upgrade_cost(tower.upgrade_level);
 
@@ -170,7 +170,7 @@ pub fn handle_tower_upgrade_click(
     };
     let Some(cursor) = win
         .cursor_position()
-        .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
+        .and_then(|screen_pos| cam.viewport_to_world_2d(cam_t, screen_pos).ok())
     else {
         return;
     };

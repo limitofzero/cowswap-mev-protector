@@ -86,7 +86,7 @@ pub fn spawn_initial_towers(
     for (tower_type, pos) in layout {
         let color = tower_type.color();
         let range = tower_type.range();
-        let c = color.to_srgba();
+        let srgba = color.to_srgba();
         let sheet = tower_assets.upgrade_sheet(tower_type).unwrap();
 
         commands
@@ -106,9 +106,9 @@ pub fn spawn_initial_towers(
                 TowerVisualLevel(0),
                 Name::new(format!("Tower::{}", tower_type.label())),
             ))
-            .with_children(|p| {
-                spawn_range_visuals(p, &mut meshes, &mut materials, range, c, false);
-                p.spawn((
+            .with_children(|children| {
+                spawn_range_visuals(children, &mut meshes, &mut materials, range, srgba, false);
+                children.spawn((
                     Sprite {
                         image: sheet.clone(),
                         texture_atlas: Some(TextureAtlas {

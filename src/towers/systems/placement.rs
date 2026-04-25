@@ -39,24 +39,24 @@ pub(super) fn is_valid_placement<F: QueryFilter>(
     }
     tower_q
         .iter()
-        .all(|t| t.translation.truncate().distance(pos) >= MIN_TOWER_SPACING)
+        .all(|transform| transform.translation.truncate().distance(pos) >= MIN_TOWER_SPACING)
 }
 
 pub(super) fn spawn_range_visuals(
-    p: &mut bevy::ecs::relationship::RelatedSpawnerCommands<'_, bevy::ecs::hierarchy::ChildOf>,
+    children: &mut bevy::ecs::relationship::RelatedSpawnerCommands<'_, bevy::ecs::hierarchy::ChildOf>,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ColorMaterial>,
     range: f32,
-    c: bevy::color::Srgba,
+    color: bevy::color::Srgba,
     ghost: bool,
 ) {
     let fill_alpha = if ghost { 0.07 } else { 0.04 };
     let ring_alpha = if ghost { 0.70 } else { 0.55 };
 
-    let mut fill = p.spawn((
+    let mut fill = children.spawn((
         Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
         MeshMaterial2d(materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, fill_alpha),
+            color: Color::srgba(color.red, color.green, color.blue, fill_alpha),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         })),
@@ -66,7 +66,7 @@ pub(super) fn spawn_range_visuals(
         fill.insert((Visibility::Hidden, TowerRangeVisual));
     }
 
-    let mut ring = p.spawn((
+    let mut ring = children.spawn((
         Mesh2d(
             meshes.add(
                 Annulus::new(range - 0.75, range + 0.75)
@@ -75,7 +75,7 @@ pub(super) fn spawn_range_visuals(
             ),
         ),
         MeshMaterial2d(materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, ring_alpha),
+            color: Color::srgba(color.red, color.green, color.blue, ring_alpha),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         })),
@@ -100,13 +100,13 @@ pub fn manage_ghost_tower(
         return;
     }
     // Always despawn whichever cursor is active before potentially spawning a new one
-    for e in &delete_cursor_q {
-        commands.entity(e).despawn();
+    for entity in &delete_cursor_q {
+        commands.entity(entity).despawn();
     }
     match &*placement_mode {
         PlacementMode::Placing(tower_type) => {
-            for (e, _) in &ghost_q {
-                commands.entity(e).despawn();
+            for (entity, _) in &ghost_q {
+                commands.entity(entity).despawn();
             }
             let (Some(sheet), Some(layout)) = (
                 tower_assets.ghost_sheet.clone(),
@@ -116,7 +116,7 @@ pub fn manage_ghost_tower(
             };
             let color = tower_type.color();
             let range = tower_type.range();
-            let c = color.to_srgba();
+            let srgba = color.to_srgba();
             commands
                 .spawn((
                     Sprite {
@@ -133,13 +133,13 @@ pub fn manage_ghost_tower(
                     GhostTower(tower_type.clone()),
                     Name::new("GhostTower"),
                 ))
-                .with_children(|p| {
-                    spawn_range_visuals(p, &mut meshes, &mut materials, range, c, true);
+                .with_children(|children| {
+                    spawn_range_visuals(children, &mut meshes, &mut materials, range, srgba, true);
                 });
         }
         PlacementMode::Removing => {
-            for (e, _) in &ghost_q {
-                commands.entity(e).despawn();
+            for (entity, _) in &ghost_q {
+                commands.entity(entity).despawn();
             }
             if let Some(icon) = tower_assets.delete_icon.clone() {
                 commands.spawn((
@@ -156,8 +156,8 @@ pub fn manage_ghost_tower(
             }
         }
         PlacementMode::Idle => {
-            for (e, _) in &ghost_q {
-                commands.entity(e).despawn();
+            for (entity, _) in &ghost_q {
+                commands.entity(entity).despawn();
             }
         }
     }
@@ -190,11 +190,11 @@ pub fn update_ghost_tower(
     ghost_t.translation.y = pos.y;
 
     let valid = is_valid_placement(pos, &path, &tower_q);
-    let a = ghost_s.color.alpha();
+    let alpha = ghost_s.color.alpha();
     ghost_s.color = if valid {
-        Color::srgba(0.75, 1.0, 0.75, a)
+        Color::srgba(0.75, 1.0, 0.75, alpha)
     } else {
-        Color::srgba(1.0, 0.45, 0.45, a)
+        Color::srgba(1.0, 0.45, 0.45, alpha)
     };
 }
 
@@ -204,7 +204,7 @@ pub fn update_delete_cursor(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
 ) {
-    let Ok(mut t) = cursor_q.single_mut() else {
+    let Ok(mut transform) = cursor_q.single_mut() else {
         return;
     };
     let Ok(window) = windows.single() else { return };
@@ -214,8 +214,8 @@ pub fn update_delete_cursor(
     let Some(pos) = cursor_world_pos(window, cam, cam_t) else {
         return;
     };
-    t.translation.x = pos.x;
-    t.translation.y = pos.y;
+    transform.translation.x = pos.x;
+    transform.translation.y = pos.y;
 }
 
 /// Left-click to place, right-click / Escape to cancel.
@@ -254,7 +254,7 @@ pub fn handle_placement_click(
     }
 
     // Don't place when clicking a UI button
-    if ui_buttons.iter().any(|i| *i == Interaction::Pressed) {
+    if ui_buttons.iter().any(|interaction| *interaction == Interaction::Pressed) {
         return;
     }
 
@@ -281,7 +281,7 @@ pub fn handle_placement_click(
 
     let color = tower_type.color();
     let range = tower_type.range();
-    let c = color.to_srgba();
+    let srgba = color.to_srgba();
     let (Some(sheet), Some(layout)) = (
         tower_assets.upgrade_sheet(&tower_type),
         tower_assets.upgrade_layout.clone(),
@@ -305,9 +305,9 @@ pub fn handle_placement_click(
             TowerVisualLevel(0),
             Name::new(format!("Tower::{}", tower_type.label())),
         ))
-        .with_children(|p| {
-            spawn_range_visuals(p, &mut meshes, &mut materials, range, c, false);
-            p.spawn((
+        .with_children(|children| {
+            spawn_range_visuals(children, &mut meshes, &mut materials, range, srgba, false);
+            children.spawn((
                 Sprite {
                     image: sheet.clone(),
                     texture_atlas: Some(TextureAtlas {

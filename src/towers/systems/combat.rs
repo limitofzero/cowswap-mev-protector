@@ -56,7 +56,7 @@ pub fn tick_towers(
             TowerType::BatchAuctioneer => {
                 let batch_size = tx_query
                     .iter()
-                    .filter(|(_, t)| tower_pos.distance(t.translation.truncate()) <= range)
+                    .filter(|(_, transform)| tower_pos.distance(transform.translation.truncate()) <= range)
                     .count() as u32;
                 if batch_size == 0 {
                     continue;
@@ -79,14 +79,14 @@ pub fn tick_towers(
             TowerType::Solver => {
                 let target = enemy_query
                     .iter()
-                    .filter(|(_, _, t)| tower_pos.distance(t.translation.truncate()) <= range)
-                    .min_by(|a, b| {
+                    .filter(|(_, _, transform)| tower_pos.distance(transform.translation.truncate()) <= range)
+                    .min_by(|lhs, rhs| {
                         tower_pos
-                            .distance(a.2.translation.truncate())
-                            .partial_cmp(&tower_pos.distance(b.2.translation.truncate()))
+                            .distance(lhs.2.translation.truncate())
+                            .partial_cmp(&tower_pos.distance(rhs.2.translation.truncate()))
                             .unwrap_or(std::cmp::Ordering::Equal)
                     })
-                    .map(|(e, _, _)| e);
+                    .map(|(entity, _, _)| entity);
 
                 if let Some(target_entity) = target {
                     let (Some(sheet), Some(layout)) = (
