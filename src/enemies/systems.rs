@@ -148,11 +148,11 @@ pub fn setup_enemy_assets(
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut enemy_assets: ResMut<EnemyAssets>,
 ) {
-    enemy_assets.layout      = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 1, None, None)));
-    enemy_assets.frontrunner = Some(asset_server.load("enemies/enemy_frontrunner.png"));
-    enemy_assets.backrunner  = Some(asset_server.load("enemies/enemy_backrunner.png"));
-    enemy_assets.sandwich    = Some(asset_server.load("enemies/enemy_sandwich.png"));
-    enemy_assets.jitlp       = Some(asset_server.load("enemies/enemy_jitlp.png"));
+    enemy_assets.upgrade_layout       = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 2, None, None)));
+    enemy_assets.frontrunner_upgrades = Some(asset_server.load("enemies/enemy_frontrunner_upgrades.png"));
+    enemy_assets.backrunner_upgrades  = Some(asset_server.load("enemies/enemy_backrunner_upgrades.png"));
+    enemy_assets.sandwich_upgrades    = Some(asset_server.load("enemies/enemy_sandwich_upgrades.png"));
+    enemy_assets.jitlp_upgrades       = Some(asset_server.load("enemies/enemy_jitlp_upgrades.png"));
 }
 
 /// Spawning rule: active_enemies ≤ wave_target at all times.
@@ -189,9 +189,14 @@ pub fn tick_waves(
         let active = enemy_q.iter().count() as u32;
         let to_spawn = (waves.wave_target.saturating_sub(active)).min(per_tick);
         for _ in 0..to_spawn {
-            let enemy_type = waves.pick_enemy();
+            let (enemy_type, level) = if waves.lv1_remaining > 0 {
+                waves.lv1_remaining -= 1;
+                (waves.pick_lv1_enemy(), 1u8)
+            } else {
+                (waves.pick_enemy(), 0u8)
+            };
             let pos = waves.rand_spawn_pos();
-            spawn_enemy(&mut commands, &enemy_assets, enemy_type, pos);
+            spawn_enemy(&mut commands, &enemy_assets, enemy_type, level, pos);
         }
     }
 }
@@ -200,21 +205,28 @@ fn spawn_enemy(
     commands: &mut Commands,
     enemy_assets: &EnemyAssets,
     enemy_type: EnemyType,
+    level: u8,
     pos: Vec2,
 ) {
-    let (Some(layout), Some(image)) = (enemy_assets.layout.clone(), enemy_assets.texture(&enemy_type)) else { return };
-    let size = enemy_type.size();
+    let enemy = Enemy::new_leveled(enemy_type.clone(), level);
+    let size = enemy.sprite_size();
+    // Use upgrade sheet (6×2) for all enemies; row = level, base atlas index = level * 6.
+    let (Some(layout), Some(image)) = (
+        enemy_assets.upgrade_layout.clone(),
+        enemy_assets.upgrade_texture(&enemy_type),
+    ) else { return };
+    let anim_base = level as usize * 6;
     commands.spawn((
         Sprite {
             image,
-            texture_atlas: Some(TextureAtlas { layout, index: 0 }),
+            texture_atlas: Some(TextureAtlas { layout, index: anim_base }),
             custom_size: Some(Vec2::splat(size)),
             ..default()
         },
         Transform::from_xyz(pos.x, pos.y, 1.5),
-        Enemy::new(enemy_type.clone()),
-        AnimationTimer::new(3.0, 6),
-        Name::new(format!("{enemy_type:?}")),
+        enemy,
+        AnimationTimer::new_with_offset(3.0, 6, anim_base),
+        Name::new(format!("{enemy_type:?} Lv{}", level + 1)),
     )).with_children(|p| {
         // Background bar (dark, full width)
         p.spawn((

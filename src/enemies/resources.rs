@@ -5,20 +5,21 @@ use super::components::EnemyType;
 /// Pre-loaded handles for all enemy sprites and the shared atlas layout.
 #[derive(Resource, Default)]
 pub struct EnemyAssets {
-    pub layout: Option<Handle<TextureAtlasLayout>>,
-    pub frontrunner: Option<Handle<Image>>,
-    pub backrunner:  Option<Handle<Image>>,
-    pub sandwich:    Option<Handle<Image>>,
-    pub jitlp:       Option<Handle<Image>>,
+    /// 6 cols × 2 rows, 96×96 — row 0 = Lv1, row 1 = Lv2.
+    pub upgrade_layout: Option<Handle<TextureAtlasLayout>>,
+    pub frontrunner_upgrades: Option<Handle<Image>>,
+    pub backrunner_upgrades:  Option<Handle<Image>>,
+    pub sandwich_upgrades:    Option<Handle<Image>>,
+    pub jitlp_upgrades:       Option<Handle<Image>>,
 }
 
 impl EnemyAssets {
-    pub fn texture(&self, enemy_type: &EnemyType) -> Option<Handle<Image>> {
+    pub fn upgrade_texture(&self, enemy_type: &EnemyType) -> Option<Handle<Image>> {
         match enemy_type {
-            EnemyType::Frontrunner => self.frontrunner.clone(),
-            EnemyType::Backrunner  => self.backrunner.clone(),
-            EnemyType::SandwichBot => self.sandwich.clone(),
-            EnemyType::JitLp       => self.jitlp.clone(),
+            EnemyType::Frontrunner => self.frontrunner_upgrades.clone(),
+            EnemyType::Backrunner  => self.backrunner_upgrades.clone(),
+            EnemyType::SandwichBot => self.sandwich_upgrades.clone(),
+            EnemyType::JitLp       => self.jitlp_upgrades.clone(),
         }
     }
 }
@@ -35,6 +36,8 @@ pub struct WaveManager {
     pub block_timer: Timer,
     /// Staggers individual spawns so they don't all appear at once.
     pub spawn_timer: Timer,
+    /// How many Lv1 bots still need to be spawned this wave.
+    pub lv1_remaining: u32,
     seed: u64,
 }
 
@@ -47,6 +50,7 @@ impl Default for WaveManager {
             first_block_done: false,
             block_timer: Timer::from_seconds(15.0, TimerMode::Repeating),
             spawn_timer: Timer::from_seconds(2.5, TimerMode::Repeating),
+            lv1_remaining: 0,
             seed: 0xfeed_face_dead_beef,
         }
     }
@@ -75,11 +79,27 @@ impl WaveManager {
         ZONES[i]
     }
 
+    /// How many Lv1 bots to include per wave (first appears at wave 16).
+    fn lv1_quota(wave: u32) -> u32 {
+        if wave < 16 { 0 } else { ((wave - 16) / 8 + 1).min(4) }
+    }
+
     /// Advance to the next wave and update the active-enemy target.
     /// Ramp: 2, 2, 3, 4, 5, 6 … capped at 20.
     pub fn next_wave(&mut self) {
         self.wave += 1;
         self.wave_target = if self.wave <= 2 { 2 } else { self.wave.min(20) };
+        self.lv1_remaining = Self::lv1_quota(self.wave);
+    }
+
+    /// Pick a random enemy type for a Lv1 bot.
+    pub fn pick_lv1_enemy(&mut self) -> EnemyType {
+        match (self.rng() % 4) as u32 {
+            0 => EnemyType::Frontrunner,
+            1 => EnemyType::Backrunner,
+            2 => EnemyType::SandwichBot,
+            _ => EnemyType::JitLp,
+        }
     }
 
     /// Pick one enemy type based on current wave difficulty.
