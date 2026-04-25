@@ -79,9 +79,17 @@ impl WaveManager {
         ZONES[i]
     }
 
-    /// How many Lv1 bots to include per wave (first appears at wave 16).
+    /// How many Lv2 bots to include per wave.
     fn lv1_quota(wave: u32) -> u32 {
-        if wave < 16 { 0 } else { ((wave - 16) / 8 + 1).min(4) }
+        match wave {
+            0..=7   => 0,
+            8..=15  => 1,
+            16..=19 => 2,
+            20..=23 => 3,
+            24..=29 => 4,
+            30..=33 => 5,
+            _       => 6,
+        }
     }
 
     /// Advance to the next wave and update the active-enemy target.
