@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{towers::AnimationTimer, transactions::Transaction, resources::NetworkLoad};
+use crate::{resources::NetworkLoad, towers::AnimationTimer, transactions::Transaction};
 
 use super::components::{Enemy, EnemyHpBarFg, EnemyType};
 use super::resources::{EnemyAssets, WaveManager};
@@ -26,7 +26,9 @@ pub fn find_enemy_targets(
     for (mut enemy, enemy_transform) in &mut enemy_query {
         // Keep valid existing target.
         if let Some(t) = enemy.target {
-            if claimed.contains(&t) { continue; }
+            if claimed.contains(&t) {
+                continue;
+            }
         }
 
         // Lost target or had none — find nearest free tx.
@@ -34,13 +36,17 @@ pub fn find_enemy_targets(
         enemy.target = tx_query
             .iter()
             .filter_map(|(e, tx, tx_t)| {
-                if tx.is_immune() || claimed.contains(&e) { return None; }
+                if tx.is_immune() || claimed.contains(&e) {
+                    return None;
+                }
                 Some((e, pos.distance(tx_t.translation.truncate())))
             })
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(e, _)| e);
 
-        if let Some(t) = enemy.target { claimed.insert(t); }
+        if let Some(t) = enemy.target {
+            claimed.insert(t);
+        }
     }
 }
 
@@ -57,9 +63,16 @@ pub fn extract_value(
     // Read pass — .get() is immutable, no aliasing issue
     for (enemy, enemy_t) in &enemy_query {
         let Some(target) = enemy.target else { continue };
-        let Ok((tx, tx_t)) = tx_query.get(target) else { continue };
-        let dist = enemy_t.translation.truncate().distance(tx_t.translation.truncate());
-        if dist > enemy.attack_range { continue; }
+        let Ok((tx, tx_t)) = tx_query.get(target) else {
+            continue;
+        };
+        let dist = enemy_t
+            .translation
+            .truncate()
+            .distance(tx_t.translation.truncate());
+        if dist > enemy.attack_range {
+            continue;
+        }
         // Batched txs dilute the drain across all members — attacker can't isolate one tx
         let batch_scale = tx.batch.map_or(1.0, |(_, size)| 1.0 / size.max(1) as f32);
         *drains.entry(target).or_default() += tx.value * enemy.drain_rate * batch_scale * dt;
@@ -90,7 +103,8 @@ pub fn enemy_movement(
         };
         if let Some(d) = dest {
             let dir = (d - pos).normalize_or_zero();
-            transform.translation += (dir * enemy.effective_speed() * time.delta_secs()).extend(0.0);
+            transform.translation +=
+                (dir * enemy.effective_speed() * time.delta_secs()).extend(0.0);
         }
     }
 }
@@ -119,7 +133,9 @@ pub fn update_enemy_hp_bars(
         let ratio = (enemy.hp / enemy.max_hp).clamp(0.0, 1.0);
         let full_w = enemy.sprite_size() * 0.85;
         for &child in children {
-            let Ok((mut sprite, mut t)) = bar_q.get_mut(child) else { continue };
+            let Ok((mut sprite, mut t)) = bar_q.get_mut(child) else {
+                continue;
+            };
             let new_w = full_w * ratio;
             sprite.custom_size = Some(Vec2::new(new_w, BAR_H));
             t.translation.x = -full_w * 0.5 + new_w * 0.5;
@@ -146,11 +162,19 @@ pub fn setup_enemy_assets(
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut enemy_assets: ResMut<EnemyAssets>,
 ) {
-    enemy_assets.upgrade_layout       = Some(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(96), 6, 4, None, None)));
-    enemy_assets.frontrunner_upgrades = Some(asset_server.load("enemies/enemy_frontrunner_upgrades.png"));
-    enemy_assets.backrunner_upgrades  = Some(asset_server.load("enemies/enemy_backrunner_upgrades.png"));
-    enemy_assets.sandwich_upgrades    = Some(asset_server.load("enemies/enemy_sandwich_upgrades.png"));
-    enemy_assets.jitlp_upgrades       = Some(asset_server.load("enemies/enemy_jitlp_upgrades.png"));
+    enemy_assets.upgrade_layout = Some(layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::splat(96),
+        6,
+        4,
+        None,
+        None,
+    )));
+    enemy_assets.frontrunner_upgrades =
+        Some(asset_server.load("enemies/enemy_frontrunner_upgrades.png"));
+    enemy_assets.backrunner_upgrades =
+        Some(asset_server.load("enemies/enemy_backrunner_upgrades.png"));
+    enemy_assets.sandwich_upgrades = Some(asset_server.load("enemies/enemy_sandwich_upgrades.png"));
+    enemy_assets.jitlp_upgrades = Some(asset_server.load("enemies/enemy_jitlp_upgrades.png"));
 }
 
 /// Spawning rule: active_enemies ≤ wave_target at all times.
@@ -183,7 +207,9 @@ pub fn tick_waves(
     }
 
     // Fill up to wave_target; spawn batch grows every 8 waves
-    if waves.wave_target == 0 { return; }
+    if waves.wave_target == 0 {
+        return;
+    }
     waves.spawn_timer.tick(delta);
     if waves.spawn_timer.just_finished() {
         let per_tick = 1 + waves.wave / 8;
@@ -211,36 +237,43 @@ fn spawn_enemy(
     let (Some(layout), Some(image)) = (
         enemy_assets.upgrade_layout.clone(),
         enemy_assets.upgrade_texture(&enemy_type),
-    ) else { return };
+    ) else {
+        return;
+    };
     let anim_base = level as usize * 6;
-    commands.spawn((
-        Sprite {
-            image,
-            texture_atlas: Some(TextureAtlas { layout, index: anim_base }),
-            custom_size: Some(Vec2::splat(size)),
-            ..default()
-        },
-        Transform::from_xyz(pos.x, pos.y, 1.5),
-        enemy,
-        AnimationTimer::new_with_offset(3.0, 6, anim_base),
-        Name::new(format!("{enemy_type:?} Lv{}", level + 1)),
-    )).with_children(|p| {
-        p.spawn((
+    commands
+        .spawn((
             Sprite {
-                color: Color::srgba(0.0, 0.0, 0.0, 0.7),
-                custom_size: Some(Vec2::new(bar_w, BAR_H)),
+                image,
+                texture_atlas: Some(TextureAtlas {
+                    layout,
+                    index: anim_base,
+                }),
+                custom_size: Some(Vec2::splat(size)),
                 ..default()
             },
-            Transform::from_xyz(0.0, bar_y, 0.1),
-        ));
-        p.spawn((
-            Sprite {
-                color: Color::srgb(0.2, 1.0, 0.0),
-                custom_size: Some(Vec2::new(bar_w, BAR_H)),
-                ..default()
-            },
-            Transform::from_xyz(0.0, bar_y, 0.2),
-            EnemyHpBarFg,
-        ));
-    });
+            Transform::from_xyz(pos.x, pos.y, 1.5),
+            enemy,
+            AnimationTimer::new_with_offset(3.0, 6, anim_base),
+            Name::new(format!("{enemy_type:?} Lv{}", level + 1)),
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Sprite {
+                    color: Color::srgba(0.0, 0.0, 0.0, 0.7),
+                    custom_size: Some(Vec2::new(bar_w, BAR_H)),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, bar_y, 0.1),
+            ));
+            p.spawn((
+                Sprite {
+                    color: Color::srgb(0.2, 1.0, 0.0),
+                    custom_size: Some(Vec2::new(bar_w, BAR_H)),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, bar_y, 0.2),
+                EnemyHpBarFg,
+            ));
+        });
 }

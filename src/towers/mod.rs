@@ -16,25 +16,24 @@ impl Plugin for TowerPlugin {
         app.init_resource::<resources::TowerAssets>()
             .add_systems(Startup, systems::setup_tower_assets)
             .add_systems(OnEnter(GameState::Playing), systems::spawn_initial_towers)
-        .add_systems(
-            Update,
-            (
-                systems::manage_ghost_tower,
-                systems::update_ghost_tower,
-                systems::update_delete_cursor,
-                systems::handle_placement_click,
-                systems::handle_remove_tower,
-                systems::tick_towers,
-                systems::move_projectiles,
-                systems::tick_hit_effects,
-                systems::animate_sprites,
-                systems::update_tower_range_visibility,
-                systems::sync_tower_upgrade_visuals,
-                systems::update_upgrade_preview,
-                systems::handle_tower_upgrade_click,
-            )
-                .run_if(in_state(GameState::Playing).and(not_paused)),
-        );
+            .add_systems(
+                Update,
+                (
+                    systems::manage_ghost_tower,
+                    systems::update_ghost_tower,
+                    systems::update_delete_cursor,
+                    systems::handle_placement_click,
+                    systems::handle_remove_tower,
+                    systems::tick_towers,
+                    systems::move_projectiles,
+                    systems::tick_hit_effects,
+                    systems::animate_sprites,
+                    systems::update_tower_range_visibility,
+                    systems::sync_tower_upgrade_visuals,
+                    systems::update_upgrade_preview,
+                    systems::handle_tower_upgrade_click,
+                )
+                    .run_if(in_state(GameState::Playing).and(not_paused)),
+            );
     }
-
 }

@@ -24,7 +24,10 @@ pub struct GameEconomy {
 
 impl Default for GameEconomy {
     fn default() -> Self {
-        Self { balance: 300.0, fee_rate: 0.01 }
+        Self {
+            balance: 300.0,
+            fee_rate: 0.01,
+        }
     }
 }
 
@@ -74,7 +77,10 @@ pub struct NetworkLoad {
 
 impl Default for NetworkLoad {
     fn default() -> Self {
-        Self { level: 0, seed: 0xc0ffee_dead_beef_00 }
+        Self {
+            level: 0,
+            seed: 0xc0ffee_dead_beef_00,
+        }
     }
 }
 
@@ -87,12 +93,16 @@ impl NetworkLoad {
     }
 
     /// Called once per block when wave >= 4. Randomly steps level ±1.
+    /// Distribution: 50% increase, 25% stay, 25% decrease — biased upward so
+    /// level 2 is reachable within a normal game session.
     pub fn tick_block(&mut self, wave: u32) {
-        if wave < 4 { return; }
-        match (self.rng() % 3) as u8 {
-            0 => self.level = self.level.saturating_sub(1),
-            2 => self.level = (self.level + 1).min(2),
-            _ => {}
+        if wave < 4 {
+            return;
+        }
+        match (self.rng() % 4) as u8 {
+            0 => self.level = self.level.saturating_sub(1), // 25% down
+            1 => {}                                         // 25% stay
+            _ => self.level = (self.level + 1).min(2),      // 50% up
         }
     }
 
@@ -125,7 +135,11 @@ impl NetworkLoad {
     /// Derived: tx/s as a display string (e.g. "0.33", "0.5", "1").
     pub fn txs_per_sec_str(&self) -> String {
         let rate = 1.0 / self.spawn_interval();
-        if rate < 1.0 { format!("{:.2}", rate) } else { format!("{:.0}", rate) }
+        if rate < 1.0 {
+            format!("{:.2}", rate)
+        } else {
+            format!("{:.0}", rate)
+        }
     }
 
     /// Derived: speed percentage shown to the player (e.g. 100, 90, 75).

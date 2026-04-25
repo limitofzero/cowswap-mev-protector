@@ -1,12 +1,14 @@
 use bevy::prelude::*;
 
-use crate::{enemies::components::Enemy, mempool::MempoolPath, resources::{GameEconomy, GameScore, NetworkLoad}, towers::AnimationTimer};
 use super::components::ImmunitySource;
-
-use super::{
-    components::Transaction,
-    resources::TxSpawner,
+use crate::{
+    enemies::components::Enemy,
+    mempool::MempoolPath,
+    resources::{GameEconomy, GameScore, NetworkLoad},
+    towers::AnimationTimer,
 };
+
+use super::{components::Transaction, resources::TxSpawner};
 
 static TX_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
@@ -16,26 +18,33 @@ pub fn setup_tx_spawner(
     mut spawner: ResMut<TxSpawner>,
 ) {
     spawner.layout = Some(layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::new(80, 88), 8, 1, None, None,
+        UVec2::new(80, 88),
+        8,
+        1,
+        None,
+        None,
     )));
     spawner.textures = super::components::TokenType::ALL
         .iter()
         .map(|t| asset_server.load(t.sprite_path()))
         .collect();
     spawner.fx_layout = Some(layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::new(80, 88), 6, 1, None, None,
+        UVec2::new(80, 88),
+        6,
+        1,
+        None,
+        None,
     )));
-    spawner.fx_cow      = Some(asset_server.load("effects/fx_cow.png"));
-    spawner.fx_batch    = Some(asset_server.load("effects/fx_batch.png"));
+    spawner.fx_cow = Some(asset_server.load("effects/fx_cow.png"));
+    spawner.fx_batch = Some(asset_server.load("effects/fx_batch.png"));
     spawner.fx_darkpool = Some(asset_server.load("effects/fx_darkpool.png"));
 }
 
 /// Adjusts the tx spawn interval whenever the network load level changes.
-pub fn sync_tx_spawn_rate(
-    network: Res<NetworkLoad>,
-    mut spawner: ResMut<TxSpawner>,
-) {
-    if !network.is_changed() { return; }
+pub fn sync_tx_spawn_rate(network: Res<NetworkLoad>, mut spawner: ResMut<TxSpawner>) {
+    if !network.is_changed() {
+        return;
+    }
     spawner.timer = Timer::from_seconds(network.spawn_interval(), TimerMode::Repeating);
 }
 
@@ -66,38 +75,46 @@ pub fn spawn_transactions(
     let label = format_label(amount, token.symbol());
     let label_color = token.color();
 
-    commands.spawn((
-        Sprite {
-            image: texture,
-            texture_atlas: Some(TextureAtlas { layout, index: start_frame }),
-            custom_size: Some(Vec2::new(40.0, 48.0)),
-            ..default()
-        },
-        Transform::from_xyz(pos.x, pos.y, 1.0),
-        Transaction::new(value_cow, speed),
-        token,
-        AnimationTimer::new(5.0, 4),
-        Name::new(format!("Tx{id}")),
-    )).with_children(|parent| {
-        parent.spawn((
-            Text2d::new(label),
-            TextFont { font_size: 8.0, ..default() },
-            TextColor(label_color),
-            Transform::from_xyz(0.0, 32.0, 0.1),
-            super::components::TxAmountLabel,
-        ));
-        // Fx effect sprite — sits behind the tx sprite, animated, hidden until an effect is active
-        parent.spawn((
+    commands
+        .spawn((
             Sprite {
-                custom_size: Some(Vec2::new(80.0, 88.0)),
+                image: texture,
+                texture_atlas: Some(TextureAtlas {
+                    layout,
+                    index: start_frame,
+                }),
+                custom_size: Some(Vec2::new(40.0, 48.0)),
                 ..default()
             },
-            Transform::from_xyz(0.0, 0.0, -0.1),
-            Visibility::Hidden,
-            super::components::TxHighlight,
-            AnimationTimer::new(8.0, 6),
-        ));
-    });
+            Transform::from_xyz(pos.x, pos.y, 1.0),
+            Transaction::new(value_cow, speed),
+            token,
+            AnimationTimer::new(5.0, 4),
+            Name::new(format!("Tx{id}")),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text2d::new(label),
+                TextFont {
+                    font_size: 8.0,
+                    ..default()
+                },
+                TextColor(label_color),
+                Transform::from_xyz(0.0, 32.0, 0.1),
+                super::components::TxAmountLabel,
+            ));
+            // Fx effect sprite — sits behind the tx sprite, animated, hidden until an effect is active
+            parent.spawn((
+                Sprite {
+                    custom_size: Some(Vec2::new(80.0, 88.0)),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 0.0, -0.1),
+                Visibility::Hidden,
+                super::components::TxHighlight,
+                AnimationTimer::new(8.0, 6),
+            ));
+        });
 }
 
 /// Keep the child Text2d label in sync with the tx's current remaining value.
@@ -127,19 +144,28 @@ pub fn update_tx_highlight(
         spawner.fx_cow.clone(),
         spawner.fx_batch.clone(),
         spawner.fx_darkpool.clone(),
-    ) else { return };
+    ) else {
+        return;
+    };
 
     for (tx, children) in &tx_query {
         let fx_image = fx_image_for(tx, &fx_cow, &fx_batch, &fx_darkpool);
         for &child in children {
-            let Ok((mut sprite, mut vis)) = highlight_q.get_mut(child) else { continue };
+            let Ok((mut sprite, mut vis)) = highlight_q.get_mut(child) else {
+                continue;
+            };
             match fx_image.clone() {
                 Some(img) => {
                     sprite.image = img;
-                    sprite.texture_atlas = Some(TextureAtlas { layout: layout.clone(), index: sprite.texture_atlas.as_ref().map_or(0, |a| a.index) });
+                    sprite.texture_atlas = Some(TextureAtlas {
+                        layout: layout.clone(),
+                        index: sprite.texture_atlas.as_ref().map_or(0, |a| a.index),
+                    });
                     *vis = Visibility::Visible;
                 }
-                None => { *vis = Visibility::Hidden; }
+                None => {
+                    *vis = Visibility::Hidden;
+                }
             }
         }
     }
@@ -158,7 +184,9 @@ fn fx_image_for(
         });
     }
     if let Some((_, size)) = tx.batch {
-        if size > 1 { return Some(fx_batch.clone()); }
+        if size > 1 {
+            return Some(fx_batch.clone());
+        }
     }
     None
 }
@@ -184,13 +212,13 @@ pub fn update_tx_sprites(
     mut tx_query: Query<(Entity, &Transaction, &mut Sprite)>,
     enemy_query: Query<&Enemy>,
 ) {
-    let targeted: std::collections::HashSet<Entity> = enemy_query
-        .iter()
-        .filter_map(|e| e.target)
-        .collect();
+    let targeted: std::collections::HashSet<Entity> =
+        enemy_query.iter().filter_map(|e| e.target).collect();
 
     for (entity, tx, mut sprite) in &mut tx_query {
-        let Some(atlas) = &mut sprite.texture_atlas else { continue };
+        let Some(atlas) = &mut sprite.texture_atlas else {
+            continue;
+        };
 
         let status_frame = if targeted.contains(&entity) && tx.value_extracted() > 0.0 {
             Some(7) // actively being drained

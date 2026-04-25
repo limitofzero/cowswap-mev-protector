@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
-    enemies::EnemyPlugin, mempool::MempoolPlugin, menu::MenuPlugin,
-    resources::GameResourcesPlugin, towers::TowerPlugin,
-    transactions::TransactionPlugin, ui::UiPlugin,
+    enemies::EnemyPlugin, mempool::MempoolPlugin, menu::MenuPlugin, resources::GameResourcesPlugin,
+    towers::TowerPlugin, transactions::TransactionPlugin, ui::UiPlugin,
 };
 
 pub mod state;

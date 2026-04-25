@@ -23,20 +23,20 @@ pub struct TowerAssets {
     pub hit_sheet: Option<Handle<Image>>,
     /// Per-tower upgrade sheets (tower_XX_upgrades.png)
     pub cow_upgrades: Option<Handle<Image>>,
-    pub ba_upgrades:  Option<Handle<Image>>,
+    pub ba_upgrades: Option<Handle<Image>>,
     pub slv_upgrades: Option<Handle<Image>>,
-    pub sg_upgrades:  Option<Handle<Image>>,
-    pub dp_upgrades:  Option<Handle<Image>>,
+    pub sg_upgrades: Option<Handle<Image>>,
+    pub dp_upgrades: Option<Handle<Image>>,
 }
 
 impl TowerAssets {
     pub fn upgrade_sheet(&self, tower_type: &TowerType) -> Option<Handle<Image>> {
         match tower_type {
-            TowerType::CoWMatcher      => self.cow_upgrades.clone(),
+            TowerType::CoWMatcher => self.cow_upgrades.clone(),
             TowerType::BatchAuctioneer => self.ba_upgrades.clone(),
-            TowerType::Solver          => self.slv_upgrades.clone(),
-            TowerType::SlippageGuard   => self.sg_upgrades.clone(),
-            TowerType::DarkPoolNode    => self.dp_upgrades.clone(),
+            TowerType::Solver => self.slv_upgrades.clone(),
+            TowerType::SlippageGuard => self.sg_upgrades.clone(),
+            TowerType::DarkPoolNode => self.dp_upgrades.clone(),
         }
     }
 }

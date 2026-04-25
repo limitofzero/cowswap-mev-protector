@@ -89,10 +89,10 @@ impl TowerType {
     pub fn short_label(&self) -> &'static str {
         match self {
             TowerType::BatchAuctioneer => "BA",
-            TowerType::CoWMatcher      => "CoW",
-            TowerType::Solver          => "SLV",
-            TowerType::SlippageGuard   => "SG",
-            TowerType::DarkPoolNode    => "DP",
+            TowerType::CoWMatcher => "CoW",
+            TowerType::Solver => "SLV",
+            TowerType::SlippageGuard => "SG",
+            TowerType::DarkPoolNode => "DP",
         }
     }
 
@@ -109,33 +109,34 @@ impl TowerType {
     /// Index into the shared tower sprite sheets (cow=0, ba=1, slv=2, sg=3, dp=4).
     pub fn atlas_index(&self) -> usize {
         match self {
-            TowerType::CoWMatcher      => 0,
+            TowerType::CoWMatcher => 0,
             TowerType::BatchAuctioneer => 1,
-            TowerType::Solver          => 2,
-            TowerType::SlippageGuard   => 3,
-            TowerType::DarkPoolNode    => 4,
+            TowerType::Solver => 2,
+            TowerType::SlippageGuard => 3,
+            TowerType::DarkPoolNode => 4,
         }
     }
 
     pub fn description(&self) -> &'static str {
         match self {
-            TowerType::CoWMatcher =>
-                "Finds matching orders and\ngrants MEV immunity for 6s.",
-            TowerType::BatchAuctioneer =>
-                "Batches nearby txs together.\nEach extra tx dilutes enemy drain.",
-            TowerType::Solver =>
-                "Fires projectiles at bots\nto reduce their HP.",
-            TowerType::SlippageGuard =>
-                "Slows enemies inside its range\ndown to 35% movement speed.",
-            TowerType::DarkPoolNode =>
-                "Hides txs from bots with a\ndark pool shield for 4s.",
+            TowerType::CoWMatcher => "Finds matching orders and\ngrants MEV immunity for 6s.",
+            TowerType::BatchAuctioneer => {
+                "Batches nearby txs together.\nEach extra tx dilutes enemy drain."
+            }
+            TowerType::Solver => "Fires projectiles at bots\nto reduce their HP.",
+            TowerType::SlippageGuard => {
+                "Slows enemies inside its range\ndown to 35% movement speed."
+            }
+            TowerType::DarkPoolNode => "Hides txs from bots with a\ndark pool shield for 4s.",
         }
     }
 
     pub fn stats_line(&self) -> String {
         format!(
             "Range {:.0}  CD {:.1}s  Cost {:.0}c",
-            self.range(), self.cooldown_secs(), self.cost()
+            self.range(),
+            self.cooldown_secs(),
+            self.cost()
         )
     }
 
@@ -165,8 +166,8 @@ impl TowerType {
         let reduction = match self {
             TowerType::BatchAuctioneer => 0.30 * level as f32,
             // DP: Lv1 -0.5s, Lv2 -0.5-0.7=1.2s, Lv3 -0.5-0.7-0.9=2.1s
-            TowerType::DarkPoolNode    => [0.0_f32, 0.5, 1.2, 2.1][level.min(3) as usize],
-            _                          => 0.0,
+            TowerType::DarkPoolNode => [0.0_f32, 0.5, 1.2, 2.1][level.min(3) as usize],
+            _ => 0.0,
         };
         (self.cooldown_secs() - reduction).max(0.2)
     }
@@ -179,10 +180,10 @@ impl TowerType {
     /// One-line description of what each upgrade level adds.
     pub fn upgrade_effect_desc(&self, level: u8) -> String {
         match self {
-            TowerType::Solver        => format!("+{}% projectile damage", level * 10),
-            TowerType::CoWMatcher    => format!("+{}% drain resistance", level * 10),
+            TowerType::Solver => format!("+{}% projectile damage", level * 10),
+            TowerType::CoWMatcher => format!("+{}% drain resistance", level * 10),
             TowerType::BatchAuctioneer => format!("-{:.1}s cooldown", 0.30 * level as f32),
-            TowerType::DarkPoolNode  => match level {
+            TowerType::DarkPoolNode => match level {
                 1 => "-0.5s cooldown".into(),
                 2 => "-0.7s cooldown".into(),
                 3 => "-0.9s cooldown".into(),
@@ -236,7 +237,6 @@ pub struct HitEffect {
     pub frame: usize,
 }
 
-
 /// A placed defense tower.
 #[derive(Component)]
 pub struct Tower {
@@ -263,7 +263,9 @@ impl Tower {
 
     /// Apply the next upgrade level: bump the counter and update affected stats.
     pub fn apply_upgrade(&mut self) {
-        if self.upgrade_level >= MAX_UPGRADE_LEVEL { return; }
+        if self.upgrade_level >= MAX_UPGRADE_LEVEL {
+            return;
+        }
         self.upgrade_level += 1;
         let new_cd = self.tower_type.cooldown_secs_upgraded(self.upgrade_level);
         self.cooldown = Timer::from_seconds(new_cd, TimerMode::Repeating);

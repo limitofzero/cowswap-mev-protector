@@ -8,18 +8,18 @@ pub struct EnemyAssets {
     /// 6 cols × 2 rows, 96×96 — row 0 = Lv1, row 1 = Lv2.
     pub upgrade_layout: Option<Handle<TextureAtlasLayout>>,
     pub frontrunner_upgrades: Option<Handle<Image>>,
-    pub backrunner_upgrades:  Option<Handle<Image>>,
-    pub sandwich_upgrades:    Option<Handle<Image>>,
-    pub jitlp_upgrades:       Option<Handle<Image>>,
+    pub backrunner_upgrades: Option<Handle<Image>>,
+    pub sandwich_upgrades: Option<Handle<Image>>,
+    pub jitlp_upgrades: Option<Handle<Image>>,
 }
 
 impl EnemyAssets {
     pub fn upgrade_texture(&self, enemy_type: &EnemyType) -> Option<Handle<Image>> {
         match enemy_type {
             EnemyType::Frontrunner => self.frontrunner_upgrades.clone(),
-            EnemyType::Backrunner  => self.backrunner_upgrades.clone(),
+            EnemyType::Backrunner => self.backrunner_upgrades.clone(),
             EnemyType::SandwichBot => self.sandwich_upgrades.clone(),
-            EnemyType::JitLp       => self.jitlp_upgrades.clone(),
+            EnemyType::JitLp => self.jitlp_upgrades.clone(),
         }
     }
 }
@@ -66,14 +66,14 @@ impl WaveManager {
 
     pub fn rand_spawn_pos(&mut self) -> Vec2 {
         const ZONES: &[Vec2] = &[
-            Vec2::new(-620.0,  130.0),
+            Vec2::new(-620.0, 130.0),
             Vec2::new(-620.0, -180.0),
-            Vec2::new( 620.0,  130.0),
-            Vec2::new( 620.0, -180.0),
-            Vec2::new(  20.0,  400.0),
-            Vec2::new( -20.0, -400.0),
-            Vec2::new(-340.0,  400.0),
-            Vec2::new( 340.0, -400.0),
+            Vec2::new(620.0, 130.0),
+            Vec2::new(620.0, -180.0),
+            Vec2::new(20.0, 400.0),
+            Vec2::new(-20.0, -400.0),
+            Vec2::new(-340.0, 400.0),
+            Vec2::new(340.0, -400.0),
         ];
         let i = (self.rng() as usize) % ZONES.len();
         ZONES[i]
@@ -84,8 +84,8 @@ impl WaveManager {
     /// In the endgame all active enemies are elite (Lv3).
     fn wave_quotas(wave: u32) -> [u32; 3] {
         match wave {
-            0..=7   => [0, 0, 0],
-            8..=11  => [1, 0, 0],
+            0..=7 => [0, 0, 0],
+            8..=11 => [1, 0, 0],
             12..=15 => [2, 0, 0],
             16..=19 => [3, 0, 0],
             20..=23 => [3, 1, 0],
@@ -96,7 +96,7 @@ impl WaveManager {
             40..=43 => [2, 4, 4],
             44..=47 => [0, 3, 6],
             48..=51 => [0, 1, 10],
-            _       => [0, 0, 20], // all elite
+            _ => [0, 0, 20], // all elite
         }
     }
 

@@ -5,23 +5,24 @@ use crate::game::GamePlugin;
 pub fn run_app() {
     App::new()
         .add_plugins(
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "CoW MEV Defense".into(),
-                    resolution: WindowResolution::new(1280, 720),
-                    // Bind to the <canvas id="bevy-canvas"> element in index.html
-                    #[cfg(target_arch = "wasm32")]
-                    canvas: Some("#bevy-canvas".to_owned()),
-                    fit_canvas_to_parent: true,
-                    prevent_default_event_handling: false,
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "CoW MEV Defense".into(),
+                        resolution: WindowResolution::new(1280, 720),
+                        // Bind to the <canvas id="bevy-canvas"> element in index.html
+                        #[cfg(target_arch = "wasm32")]
+                        canvas: Some("#bevy-canvas".to_owned()),
+                        fit_canvas_to_parent: true,
+                        prevent_default_event_handling: false,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
                     ..default()
                 }),
-                ..default()
-            })
-            .set(AssetPlugin {
-                meta_check: AssetMetaCheck::Never,
-                ..default()
-            })
         )
         .insert_resource(ClearColor(Color::srgb(0.04, 0.04, 0.10)))
         .add_plugins(GamePlugin)
