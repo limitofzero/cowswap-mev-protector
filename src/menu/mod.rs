@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
 
 use crate::{
@@ -10,12 +11,14 @@ use crate::{
 
 pub struct MenuPlugin;
 
-const PANEL_W: f32 = 600.0;
-const PANEL_H: f32 = 450.0;
+const PANEL_W: f32 = 720.0;
+const PANEL_H: f32 = 480.0;
 const PANEL_Z: f32 = 200.0;
 const BTN_W:   f32 = 180.0;
 const BTN_H:   f32 = 38.0;
-const BTN_Y:   f32 = -120.0;
+const BTN_Y:   f32 = -168.0;
+const ICON_X:  f32 = -330.0;
+const TEXT_X:  f32 = -300.0;
 
 #[derive(Component)] struct MenuOverlay;
 #[derive(Component)] struct MenuProceedBtn;
@@ -60,10 +63,10 @@ fn setup_menu(
     let highlight = Color::srgb(0.85, 0.75, 1.00);
 
     let enemies: &[(EnemyType, &str, &str)] = &[
-        (EnemyType::Frontrunner, "Frontrunner", "  Fast attacker   drain 12%/s   Speed **** HP **"),
-        (EnemyType::Backrunner,  "Backrunner",  "  Slow tank       drain  8%/s   Speed *    HP ****"),
-        (EnemyType::SandwichBot, "Sandwich",    "  High drain      drain 18%/s   Speed **   HP ***"),
-        (EnemyType::JitLp,       "JIT LP",      "  Lightning fast  drain 22%/s   Speed ***** HP *"),
+        (EnemyType::Frontrunner, "Frontrunner", "Spots your tx and submits one ahead of it to buy first, profiting from your price impact"),
+        (EnemyType::Backrunner,  "Backrunner",  "Follows your tx and harvests the price movement you already created"),
+        (EnemyType::SandwichBot, "Sandwich",    "Buys before your tx and sells right after it, squeezing profit from both sides"),
+        (EnemyType::JitLp,       "JIT LP",      "Injects liquidity just before your swap to steal the fees, then removes it instantly"),
     ];
 
     commands.spawn((
@@ -97,26 +100,28 @@ fn setup_menu(
             Text2d::new("-- ENEMY TYPES --"),
             TextFont { font_size: 11.0, ..default() },
             TextColor(muted),
-            Transform::from_xyz(0.0, 132.0, 1.0),
+            Transform::from_xyz(0.0, 148.0, 1.0),
         ));
 
-        // Enemy rows: name + description (icons spawned as standalone entities below)
-        let row_start_y = 105.0_f32;
-        let row_step    = 30.0_f32;
+        // Enemy rows: name (left-aligned) on upper line, description on lower line
+        let row_start_y = 118.0_f32;
+        let row_step    = 52.0_f32;
         for (i, (enemy_type, name, desc)) in enemies.iter().enumerate() {
             let y = row_start_y - i as f32 * row_step;
             p.spawn((
                 Text2d::new(*name),
-                TextFont { font_size: 11.0, ..default() },
+                TextFont { font_size: 12.0, ..default() },
                 TextColor(enemy_type.color()),
-                Transform::from_xyz(10.0, y, 1.0),
-            )).with_children(|pp| {
-                pp.spawn((
-                    TextSpan::new(*desc),
-                    TextFont { font_size: 11.0, ..default() },
-                    TextColor(gray),
-                ));
-            });
+                Transform::from_xyz(TEXT_X, y + 9.0, 1.0),
+                Anchor::CENTER_LEFT,
+            ));
+            p.spawn((
+                Text2d::new(*desc),
+                TextFont { font_size: 10.0, ..default() },
+                TextColor(gray),
+                Transform::from_xyz(TEXT_X, y - 9.0, 1.0),
+                Anchor::CENTER_LEFT,
+            ));
         }
 
         // Controls section header
@@ -124,7 +129,7 @@ fn setup_menu(
             Text2d::new("-- CONTROLS --"),
             TextFont { font_size: 11.0, ..default() },
             TextColor(muted),
-            Transform::from_xyz(0.0, -16.0, 1.0),
+            Transform::from_xyz(0.0, -100.0, 1.0),
         ));
 
         // Controls text
@@ -132,15 +137,15 @@ fn setup_menu(
             Text2d::new("Space - pause      RMB / Esc - cancel placement"),
             TextFont { font_size: 11.0, ..default() },
             TextColor(gray),
-            Transform::from_xyz(0.0, -40.0, 1.0),
+            Transform::from_xyz(0.0, -120.0, 1.0),
         ));
 
         // Towers hint
         p.spawn((
             Text2d::new("Click shop buttons to place towers. Click Remove to sell a tower for -10 COW"),
-            TextFont { font_size: 10.5, ..default() },
+            TextFont { font_size: 10.0, ..default() },
             TextColor(muted),
-            Transform::from_xyz(0.0, -66.0, 1.0),
+            Transform::from_xyz(0.0, -140.0, 1.0),
         ));
 
         // Proceed / Start button
@@ -173,18 +178,18 @@ fn setup_menu(
         asset_server.load("enemies/enemy_jitlp.png"),
     ];
 
-    let row_start_y = 105.0_f32;
-    let row_step    = 30.0_f32;
+    let row_start_y = 118.0_f32;
+    let row_step    = 52.0_f32;
     for (i, _) in enemies.iter().enumerate() {
         let world_y = row_start_y - i as f32 * row_step;
         commands.spawn((
             Sprite {
                 image: icon_images[i].clone(),
                 texture_atlas: Some(TextureAtlas { layout: icon_layout.clone(), index: 0 }),
-                custom_size: Some(Vec2::splat(26.0)),
+                custom_size: Some(Vec2::splat(32.0)),
                 ..default()
             },
-            Transform::from_xyz(-256.0, world_y, PANEL_Z + 2.0),
+            Transform::from_xyz(ICON_X, world_y, PANEL_Z + 2.0),
             Visibility::Visible,
             MenuIcon,
             Name::new("MenuIcon"),
