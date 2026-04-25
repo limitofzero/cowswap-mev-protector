@@ -1,13 +1,11 @@
 use bevy::prelude::*;
 
-use crate::{towers::AnimationTimer, transactions::Transaction};
+use crate::{towers::AnimationTimer, transactions::Transaction, resources::NetworkLoad};
 
 use super::components::{Enemy, EnemyHpBarFg, EnemyType};
 use super::resources::{EnemyAssets, WaveManager};
 
-const BAR_W: f32 = 40.0;
 const BAR_H: f32 = 5.0;
-const BAR_Y: f32 = -30.0;
 
 /// Phase 1 — assign each enemy its nearest unclaimed tx (one enemy per tx).
 /// Enemies with a valid existing target keep it; only bots whose tx is gone/immune re-target.
@@ -119,12 +117,12 @@ pub fn update_enemy_hp_bars(
 ) {
     for (enemy, children) in &enemy_q {
         let ratio = (enemy.hp / enemy.max_hp).clamp(0.0, 1.0);
+        let full_w = enemy.sprite_size() * 0.85;
         for &child in children {
             let Ok((mut sprite, mut t)) = bar_q.get_mut(child) else { continue };
-            let new_w = BAR_W * ratio;
+            let new_w = full_w * ratio;
             sprite.custom_size = Some(Vec2::new(new_w, BAR_H));
-            // Anchor bar to the left edge of the background bar
-            t.translation.x = -BAR_W * 0.5 + new_w * 0.5;
+            t.translation.x = -full_w * 0.5 + new_w * 0.5;
             sprite.color = hp_color(ratio);
         }
     }
@@ -160,6 +158,7 @@ pub fn setup_enemy_assets(
 pub fn tick_waves(
     mut commands: Commands,
     mut waves: ResMut<WaveManager>,
+    mut network: ResMut<NetworkLoad>,
     enemy_assets: Res<EnemyAssets>,
     enemy_q: Query<&Enemy>,
     time: Res<Time>,
@@ -172,12 +171,14 @@ pub fn tick_waves(
         if waves.first_block_timer.just_finished() {
             waves.first_block_done = true;
             waves.next_wave();
+            network.tick_block(waves.wave);
             waves.block_timer.reset();
         }
     } else {
         waves.block_timer.tick(delta);
         if waves.block_timer.just_finished() {
             waves.next_wave();
+            network.tick_block(waves.wave);
         }
     }
 
@@ -205,7 +206,8 @@ fn spawn_enemy(
 ) {
     let enemy = Enemy::new_leveled(enemy_type.clone(), level);
     let size = enemy.sprite_size();
-    // Use upgrade sheet (6×2) for all enemies; row = level, base atlas index = level * 6.
+    let bar_w = size * 0.85;
+    let bar_y = -(size * 0.5 + 7.0);
     let (Some(layout), Some(image)) = (
         enemy_assets.upgrade_layout.clone(),
         enemy_assets.upgrade_texture(&enemy_type),
@@ -223,23 +225,21 @@ fn spawn_enemy(
         AnimationTimer::new_with_offset(3.0, 6, anim_base),
         Name::new(format!("{enemy_type:?} Lv{}", level + 1)),
     )).with_children(|p| {
-        // Background bar (dark, full width)
         p.spawn((
             Sprite {
                 color: Color::srgba(0.0, 0.0, 0.0, 0.7),
-                custom_size: Some(Vec2::new(BAR_W, BAR_H)),
+                custom_size: Some(Vec2::new(bar_w, BAR_H)),
                 ..default()
             },
-            Transform::from_xyz(0.0, BAR_Y, 0.1),
+            Transform::from_xyz(0.0, bar_y, 0.1),
         ));
-        // Foreground bar (colored, shrinks with HP)
         p.spawn((
             Sprite {
                 color: Color::srgb(0.2, 1.0, 0.0),
-                custom_size: Some(Vec2::new(BAR_W, BAR_H)),
+                custom_size: Some(Vec2::new(bar_w, BAR_H)),
                 ..default()
             },
-            Transform::from_xyz(0.0, BAR_Y, 0.2),
+            Transform::from_xyz(0.0, bar_y, 0.2),
             EnemyHpBarFg,
         ));
     });

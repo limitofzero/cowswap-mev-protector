@@ -18,6 +18,7 @@ impl Plugin for TransactionPlugin {
             .add_systems(
                 Update,
                 (
+                    systems::sync_tx_spawn_rate,
                     systems::spawn_transactions,
                     systems::move_transactions,
                     systems::update_tx_sprites,

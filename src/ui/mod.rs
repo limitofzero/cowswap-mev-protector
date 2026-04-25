@@ -5,7 +5,7 @@ use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
 use crate::{
     enemies::resources::WaveManager,
     game::GameState,
-    resources::{GameEconomy, GameScore, PlacementMode, COW_USD_RATE},
+    resources::{GameEconomy, GameScore, NetworkLoad, PlacementMode, COW_USD_RATE},
     towers::{Tower, TowerShopButton, TowerType},
 };
 
@@ -43,6 +43,9 @@ const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 /// Compact tooltip shown when hovering a shop button (4 lines).
 #[derive(Component)] struct ShopTooltipPanel;
 #[derive(Component)] struct ShopTooltipLine(u8);
+/// Small tooltip shown when hovering the BaseFee top-bar stat (2 lines).
+#[derive(Component)] struct BaseFeeTooltipPanel;
+#[derive(Component)] struct BaseFeeTooltipLine(u8);
 /// Drives the press-and-release scale animation; removed when animation completes.
 #[derive(Component)] struct BtnClickEffect(f32);
 
@@ -54,15 +57,20 @@ const SHOP_TT_W:  f32 = 240.0;
 const SHOP_TT_H:  f32 = 106.0;
 const SHOP_TT_LINE_Y: [f32; 4] = [38.0, 18.0, 0.0, -20.0];
 
+const BASEFEE_TT_W: f32 = 280.0;
+const BASEFEE_TT_H: f32 = 52.0;
+const BASEFEE_STAT_X: f32 = 530.0;
+
 #[derive(Clone, Copy)]
-pub enum StatKind { Block, Settled, Protected, Extracted, Balance }
+pub enum StatKind { Block, Settled, Protected, Extracted, Balance, BaseFee }
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Playing), setup_world_ui)
             .add_systems(
                 Update,
-                (reposition_ui, update_stats, handle_shop_click, update_tooltip, animate_btn_click)
+                (reposition_ui, update_stats, handle_shop_click, update_tooltip,
+                 update_basefee_tooltip, animate_btn_click)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -92,6 +100,7 @@ fn setup_world_ui(
         (StatKind::Protected, "Protected: 0 COW",  Color::srgb(0.30, 1.00, 0.45),    -140.0),
         (StatKind::Extracted, "Extracted: 0 COW",  Color::srgb(1.00, 0.35, 0.35),     110.0),
         (StatKind::Balance,   "Balance: 300 COW",  Color::srgb(0.80, 0.65, 1.00),     360.0),
+        (StatKind::BaseFee,   "BaseFee: LOW",       Color::srgb(0.40, 0.90, 0.55),    BASEFEE_STAT_X),
     ];
     for (kind, text, color, x) in stats {
         commands.spawn((
@@ -103,6 +112,29 @@ fn setup_world_ui(
             TopBar,
         ));
     }
+
+    // ── BaseFee tooltip (hidden until hover) ──────────────────────────
+    commands.spawn((
+        Sprite {
+            color: Color::srgba(0.04, 0.02, 0.12, 0.94),
+            custom_size: Some(Vec2::new(BASEFEE_TT_W, BASEFEE_TT_H)),
+            ..default()
+        },
+        Transform::from_xyz(-9999.0, -9999.0, BAR_Z + 3.0),
+        Visibility::Hidden,
+        BaseFeeTooltipPanel,
+        Name::new("BaseFeeTooltip"),
+    )).with_children(|p| {
+        for i in 0u8..2 {
+            p.spawn((
+                Text2d::new(""),
+                TextFont { font_size: 12.0, ..default() },
+                TextColor(Color::WHITE),
+                Transform::from_xyz(0.0, 10.0 - i as f32 * 20.0, 0.1),
+                BaseFeeTooltipLine(i),
+            ));
+        }
+    });
 
     // ── bottom bar background ─────────────────────────────────────────
     commands.spawn((
@@ -301,17 +333,29 @@ fn update_stats(
     score: Res<GameScore>,
     economy: Res<GameEconomy>,
     waves: Res<WaveManager>,
-    mut q: Query<(&StatText, &mut Text2d)>,
+    network: Res<NetworkLoad>,
+    mut q: Query<(&StatText, &mut Text2d, &mut TextColor)>,
 ) {
-    if !score.is_changed() && !economy.is_changed() && !waves.is_changed() { return; }
-    for (stat, mut text) in &mut q {
-        text.0 = match stat.0 {
-            StatKind::Block     => format!("Block #{}", waves.wave),
-            StatKind::Settled   => format!("Settled: {}", score.txs_settled),
-            StatKind::Protected => format!("Protected: {}", fmt_usd(score.value_protected * COW_USD_RATE)),
-            StatKind::Extracted => format!("Extracted: {}", fmt_usd(score.value_extracted * COW_USD_RATE)),
-            StatKind::Balance   => format!("Balance: {:.0} COW", economy.balance),
-        };
+    if !score.is_changed() && !economy.is_changed() && !waves.is_changed() && !network.is_changed() { return; }
+    for (stat, mut text, mut color) in &mut q {
+        match stat.0 {
+            StatKind::Block     => { text.0 = format!("Block #{}", waves.wave); }
+            StatKind::Settled   => { text.0 = format!("Settled: {}", score.txs_settled); }
+            StatKind::Protected => { text.0 = format!("Protected: {}", fmt_usd(score.value_protected * COW_USD_RATE)); }
+            StatKind::Extracted => { text.0 = format!("Extracted: {}", fmt_usd(score.value_extracted * COW_USD_RATE)); }
+            StatKind::Balance   => { text.0 = format!("Balance: {:.0} COW", economy.balance); }
+            StatKind::BaseFee   => {
+                text.0 = format!("BaseFee: {}  {}tx/s  -{}%",
+                    network.label(),
+                    network.txs_per_sec_str(),
+                    network.speed_loss_pct());
+                color.0 = match network.level {
+                    0 => Color::srgb(0.40, 0.90, 0.55),
+                    1 => Color::srgb(1.00, 0.75, 0.20),
+                    _ => Color::srgb(1.00, 0.35, 0.35),
+                };
+            }
+        }
     }
 }
 
@@ -539,6 +583,54 @@ fn tower_stat_text(tt: &TowerType, level: u8) -> String {
     }
 }
 
+
+fn update_basefee_tooltip(
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    network: Res<NetworkLoad>,
+    mut panel_q: Query<(&mut Transform, &mut Visibility), With<BaseFeeTooltipPanel>>,
+    mut lines_q: Query<(&BaseFeeTooltipLine, &mut Text2d, &mut TextColor),
+        Without<BaseFeeTooltipPanel>>,
+) {
+    let Ok(win) = windows.single() else { return };
+    let Ok((cam, cam_t)) = camera_q.single() else { return };
+    let Ok((mut pt, mut pv)) = panel_q.single_mut() else { return };
+
+    let half_h = win.height() * 0.5;
+    let top_y  = half_h - TOP_BAR_H * 0.5;
+    // Hit-test: cursor within the BaseFee stat region
+    let in_stat = win.cursor_position()
+        .and_then(|c| cam.viewport_to_world_2d(cam_t, c).ok())
+        .map(|w| (w.x - BASEFEE_STAT_X).abs() < 70.0 && (w.y - top_y).abs() < TOP_BAR_H * 0.5)
+        .unwrap_or(false);
+
+    if !in_stat {
+        *pv = Visibility::Hidden;
+        return;
+    }
+
+    *pv = Visibility::Visible;
+    pt.translation.x = BASEFEE_STAT_X;
+    pt.translation.y = top_y - TOP_BAR_H * 0.5 - BASEFEE_TT_H * 0.5 - 4.0;
+
+    let stat_color = match network.level {
+        0 => Color::srgb(0.40, 0.90, 0.55),
+        1 => Color::srgb(1.00, 0.75, 0.20),
+        _ => Color::srgb(1.00, 0.35, 0.35),
+    };
+    let line_texts = [
+        (network.status_line().to_string(), stat_color),
+        (format!("Txs per second: {}   Tx speed: {}%",
+            network.txs_per_sec_str(), network.speed_pct()),
+         Color::srgb(0.75, 0.75, 0.75)),
+    ];
+    for (line, mut text, mut color) in &mut lines_q {
+        if let Some((t, c)) = line_texts.get(line.0 as usize) {
+            text.0 = t.clone();
+            color.0 = *c;
+        }
+    }
+}
 
 fn fmt_usd(usd: f32) -> String {
     if usd >= 1_000_000.0 {

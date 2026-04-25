@@ -64,6 +64,89 @@ pub fn not_paused(ps: Res<PauseState>) -> bool {
     !ps.paused
 }
 
+/// Current Ethereum-like network congestion level (0 = free, 1 = busy, 2 = very busy).
+/// Changes by at most ±1 per block starting from wave 4. Slows transaction progress.
+#[derive(Resource)]
+pub struct NetworkLoad {
+    pub level: u8,
+    seed: u64,
+}
+
+impl Default for NetworkLoad {
+    fn default() -> Self {
+        Self { level: 0, seed: 0xc0ffee_dead_beef_00 }
+    }
+}
+
+impl NetworkLoad {
+    fn rng(&mut self) -> u64 {
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 7;
+        self.seed ^= self.seed << 17;
+        self.seed
+    }
+
+    /// Called once per block when wave >= 4. Randomly steps level ±1.
+    pub fn tick_block(&mut self, wave: u32) {
+        if wave < 4 { return; }
+        match (self.rng() % 3) as u8 {
+            0 => self.level = self.level.saturating_sub(1),
+            2 => self.level = (self.level + 1).min(2),
+            _ => {}
+        }
+    }
+
+    /// Speed multiplier applied to all transaction progress each frame.
+    pub fn speed_mult(&self) -> f32 {
+        match self.level {
+            0 => 1.00,
+            1 => 0.90,
+            _ => 0.75,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self.level {
+            0 => "LOW",
+            1 => "BUSY",
+            _ => "HIGH",
+        }
+    }
+
+    /// Seconds between transaction spawns — single source of truth for spawn rate.
+    pub fn spawn_interval(&self) -> f32 {
+        match self.level {
+            0 => 3.0,
+            1 => 2.0,
+            _ => 1.0,
+        }
+    }
+
+    /// Derived: tx/s as a display string (e.g. "0.33", "0.5", "1").
+    pub fn txs_per_sec_str(&self) -> String {
+        let rate = 1.0 / self.spawn_interval();
+        if rate < 1.0 { format!("{:.2}", rate) } else { format!("{:.0}", rate) }
+    }
+
+    /// Derived: speed percentage shown to the player (e.g. 100, 90, 75).
+    pub fn speed_pct(&self) -> u8 {
+        (self.speed_mult() * 100.0).round() as u8
+    }
+
+    /// Derived: how much speed is lost (for the "-X%" display in the stat bar).
+    pub fn speed_loss_pct(&self) -> u8 {
+        100 - self.speed_pct()
+    }
+
+    pub fn status_line(&self) -> &'static str {
+        match self.level {
+            0 => "Network is almost free",
+            1 => "Network is busy",
+            _ => "Network is very busy",
+        }
+    }
+}
+
 pub struct GameResourcesPlugin;
 
 impl Plugin for GameResourcesPlugin {
@@ -72,6 +155,7 @@ impl Plugin for GameResourcesPlugin {
             .init_resource::<GameEconomy>()
             .init_resource::<PlacementMode>()
             .init_resource::<PauseState>()
-            .init_resource::<WaveState>();
+            .init_resource::<WaveState>()
+            .init_resource::<NetworkLoad>();
     }
 }

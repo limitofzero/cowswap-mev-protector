@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{enemies::components::Enemy, mempool::MempoolPath, resources::{GameEconomy, GameScore}, towers::AnimationTimer};
+use crate::{enemies::components::Enemy, mempool::MempoolPath, resources::{GameEconomy, GameScore, NetworkLoad}, towers::AnimationTimer};
 use super::components::ImmunitySource;
 
 use super::{
@@ -28,6 +28,15 @@ pub fn setup_tx_spawner(
     spawner.fx_cow      = Some(asset_server.load("effects/fx_cow.png"));
     spawner.fx_batch    = Some(asset_server.load("effects/fx_batch.png"));
     spawner.fx_darkpool = Some(asset_server.load("effects/fx_darkpool.png"));
+}
+
+/// Adjusts the tx spawn interval whenever the network load level changes.
+pub fn sync_tx_spawn_rate(
+    network: Res<NetworkLoad>,
+    mut spawner: ResMut<TxSpawner>,
+) {
+    if !network.is_changed() { return; }
+    spawner.timer = Timer::from_seconds(network.spawn_interval(), TimerMode::Repeating);
 }
 
 pub fn spawn_transactions(
@@ -208,10 +217,12 @@ pub fn move_transactions(
     path: Res<MempoolPath>,
     mut score: ResMut<GameScore>,
     mut economy: ResMut<GameEconomy>,
+    network: Res<NetworkLoad>,
     time: Res<Time>,
 ) {
+    let speed_mult = network.speed_mult();
     for (entity, mut tx, mut transform) in &mut query {
-        tx.progress += tx.speed * time.delta_secs();
+        tx.progress += tx.speed * speed_mult * time.delta_secs();
         tx.tick_immunity(time.delta());
 
         if tx.is_worthless() {
