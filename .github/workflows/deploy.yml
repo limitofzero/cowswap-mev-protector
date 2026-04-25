@@ -45,7 +45,7 @@ jobs:
           version: latest
 
       - name: Build
-        run: trunk build --release --profile wasm-release
+        run: trunk build --release
 
       - uses: actions/upload-pages-artifact@v3
         with:
