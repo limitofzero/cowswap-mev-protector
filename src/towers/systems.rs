@@ -9,7 +9,7 @@ use crate::{
 
 const REMOVE_COST: f32 = 10.0;
 
-use super::components::{AnimationTimer, DeleteCursor, GhostTower, HitEffect, Projectile, Tower, TowerRangeVisual, TowerType};
+use super::components::{AnimationTimer, DeleteCursor, GhostTower, HitEffect, Projectile, Tower, TowerRangeVisual, TowerType, TowerVisualLevel};
 use super::resources::TowerAssets;
 
 /// Tick every tower's cooldown and apply its effect when it fires.
@@ -189,23 +189,27 @@ pub fn setup_tower_assets(
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut tower_assets: ResMut<TowerAssets>,
 ) {
-    let anim_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 6, 5, None, None));
-    let ghost_layout = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 5, 1, None, None));
-    let icon_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(46, 59),  5, 1, None, None));
-    let proj_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(48), 6, 1, None, None));
-    let hit_layout   = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(80), 8, 1, None, None));
+    let upgrade_layout  = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(74, 110), 6, 4, None, None));
+    let ghost_layout    = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(84, 110), 5, 1, None, None));
+    let icon_layout     = layouts.add(TextureAtlasLayout::from_grid(UVec2::new(46, 59),  5, 1, None, None));
+    let proj_layout     = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(48), 6, 1, None, None));
+    let hit_layout      = layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(80), 8, 1, None, None));
 
-    tower_assets.anim_layout  = Some(anim_layout);
-    tower_assets.ghost_layout = Some(ghost_layout);
-    tower_assets.icon_layout  = Some(icon_layout);
-    tower_assets.proj_layout  = Some(proj_layout);
-    tower_assets.hit_layout   = Some(hit_layout);
-    tower_assets.anim_sheet   = Some(asset_server.load("towers/cowswap_towers_anim.png"));
-    tower_assets.ghost_sheet  = Some(asset_server.load("towers/cowswap_towers_ghost.png"));
-    tower_assets.icon_sheet   = Some(asset_server.load("towers/cowswap_towers_icons.png"));
-    tower_assets.delete_icon  = Some(asset_server.load("towers/tower_delete.png"));
-    tower_assets.proj_sheet   = Some(asset_server.load("towers/solver_projectile.png"));
-    tower_assets.hit_sheet    = Some(asset_server.load("towers/solver_hit.png"));
+    tower_assets.upgrade_layout = Some(upgrade_layout);
+    tower_assets.ghost_layout   = Some(ghost_layout);
+    tower_assets.icon_layout    = Some(icon_layout);
+    tower_assets.proj_layout    = Some(proj_layout);
+    tower_assets.hit_layout     = Some(hit_layout);
+    tower_assets.ghost_sheet    = Some(asset_server.load("towers/cowswap_towers_ghost.png"));
+    tower_assets.icon_sheet     = Some(asset_server.load("towers/cowswap_towers_icons.png"));
+    tower_assets.delete_icon    = Some(asset_server.load("towers/tower_delete.png"));
+    tower_assets.proj_sheet     = Some(asset_server.load("towers/solver_projectile.png"));
+    tower_assets.hit_sheet      = Some(asset_server.load("towers/solver_hit.png"));
+    tower_assets.cow_upgrades   = Some(asset_server.load("towers/tower_cow_upgrades.png"));
+    tower_assets.ba_upgrades    = Some(asset_server.load("towers/tower_ba_upgrades.png"));
+    tower_assets.slv_upgrades   = Some(asset_server.load("towers/tower_slv_upgrades.png"));
+    tower_assets.sg_upgrades    = Some(asset_server.load("towers/tower_sg_upgrades.png"));
+    tower_assets.dp_upgrades    = Some(asset_server.load("towers/tower_dp_upgrades.png"));
 }
 
 /// Spawn a starter set of towers for the demo scene.
@@ -223,23 +227,25 @@ pub fn spawn_initial_towers(
         (TowerType::SlippageGuard,   Vec2::new(-200.0,-245.0)),
     ];
 
-    let anim_layout = tower_assets.anim_layout.clone().unwrap();
+    let upgrade_layout = tower_assets.upgrade_layout.clone().unwrap();
 
     for (tower_type, pos) in layout {
         let color = tower_type.color();
         let range = tower_type.range();
         let c = color.to_srgba();
+        let sheet = tower_assets.upgrade_sheet(tower_type).unwrap();
 
         commands.spawn((
             Sprite {
-                image: tower_assets.anim_sheet.clone().unwrap(),
-                texture_atlas: Some(TextureAtlas { layout: anim_layout.clone(), index: tower_type.anim_base() }),
+                image: sheet,
+                texture_atlas: Some(TextureAtlas { layout: upgrade_layout.clone(), index: 0 }),
                 custom_size: Some(Vec2::new(84.0, 110.0)),
                 ..default()
             },
             Transform::from_xyz(pos.x, pos.y, 10.0),
             Tower::new(tower_type.clone()),
-            AnimationTimer::new_with_offset(6.0 / tower_type.cooldown_secs(), 6, tower_type.anim_base()),
+            AnimationTimer::new_with_offset(6.0 / tower_type.cooldown_secs(), 6, 0),
+            TowerVisualLevel(0),
             Name::new(format!("Tower::{}", tower_type.label())),
         )).with_children(|p| {
             spawn_range_visuals(p, &mut meshes, &mut materials, range, c);
@@ -413,17 +419,18 @@ pub fn handle_placement_click(
     let color = tower_type.color();
     let range = tower_type.range();
     let c = color.to_srgba();
-    let (Some(sheet), Some(layout)) = (tower_assets.anim_sheet.clone(), tower_assets.anim_layout.clone()) else { return };
+    let (Some(sheet), Some(layout)) = (tower_assets.upgrade_sheet(&tower_type), tower_assets.upgrade_layout.clone()) else { return };
     commands.spawn((
         Sprite {
             image: sheet,
-            texture_atlas: Some(TextureAtlas { layout, index: tower_type.anim_base() }),
+            texture_atlas: Some(TextureAtlas { layout, index: 0 }),
             custom_size: Some(Vec2::new(84.0, 110.0)),
             ..default()
         },
         Transform::from_xyz(pos.x, pos.y, 10.0),
         Tower::new(tower_type.clone()),
-        AnimationTimer::new_with_offset(6.0 / tower_type.cooldown_secs(), 6, tower_type.anim_base()),
+        AnimationTimer::new_with_offset(6.0 / tower_type.cooldown_secs(), 6, 0),
+        TowerVisualLevel(0),
         Name::new(format!("Tower::{}", tower_type.label())),
     )).with_children(|p| {
         spawn_range_visuals(p, &mut meshes, &mut materials, range, c);
@@ -543,6 +550,30 @@ pub fn update_tower_range_visibility(
             if let Ok(mut vis) = visual_q.get_mut(child) {
                 *vis = if hovered { Visibility::Visible } else { Visibility::Hidden };
             }
+        }
+    }
+}
+
+/// Sync the tower sprite to the correct upgrade row when upgrade_level changes.
+/// Uses TowerVisualLevel to detect changes without firing every frame.
+pub fn sync_tower_upgrade_visuals(
+    tower_assets: Res<TowerAssets>,
+    mut tower_q: Query<(&Tower, &mut TowerVisualLevel, &mut Sprite, &mut AnimationTimer)>,
+) {
+    let Some(layout) = tower_assets.upgrade_layout.clone() else { return };
+    for (tower, mut vis_level, mut sprite, mut anim) in &mut tower_q {
+        if vis_level.0 == tower.upgrade_level { continue; }
+        let level = tower.upgrade_level;
+        vis_level.0 = level;
+        let base = level as usize * 6;
+        anim.base = base;
+        anim.timer.reset();
+        if let Some(atlas) = sprite.texture_atlas.as_mut() {
+            atlas.index = base;
+            atlas.layout = layout.clone();
+        }
+        if let Some(sheet) = tower_assets.upgrade_sheet(&tower.tower_type) {
+            sprite.image = sheet;
         }
     }
 }

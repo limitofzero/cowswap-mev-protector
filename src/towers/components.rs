@@ -117,9 +117,6 @@ impl TowerType {
         }
     }
 
-    /// First atlas index for this tower's 6-frame animation row in cowswap_towers_anim.png.
-    pub fn anim_base(&self) -> usize { self.atlas_index() * 6 }
-
     pub fn description(&self) -> &'static str {
         match self {
             TowerType::CoWMatcher =>
@@ -198,6 +195,10 @@ impl TowerType {
 
 pub const MAX_UPGRADE_LEVEL: u8 = 3;
 pub const SOLVER_BASE_DAMAGE: f32 = 50.0;
+
+/// Tracks the last rendered upgrade level so the sprite sync system only re-runs on change.
+#[derive(Component)]
+pub struct TowerVisualLevel(pub u8);
 
 /// Marks the range fill/border children — hidden unless the tower is hovered.
 #[derive(Component)]
