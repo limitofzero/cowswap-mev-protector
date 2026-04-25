@@ -6,6 +6,20 @@ use super::components::{Enemy, EnemyHpBarFg, EnemyType};
 use super::resources::{EnemyAssets, WaveManager};
 
 const BAR_H: f32 = 5.0;
+/// HP bar width as a fraction of the enemy's sprite size.
+const HP_BAR_WIDTH_SCALE: f32 = 0.85;
+/// Gap (px) between the bottom of the enemy sprite and the top of the HP bar.
+const HP_BAR_Y_GAP: f32 = 7.0;
+/// Animation frames per level row in the enemy sprite sheet.
+const ENEMY_ANIM_FRAMES: usize = 6;
+/// Enemy sprite animation speed in frames-per-second.
+const ENEMY_ANIM_FPS: f32 = 3.0;
+/// Tile size (px, square) of each cell in the enemy upgrade atlas.
+const ENEMY_ATLAS_TILE: u32 = 96;
+/// Columns in the enemy upgrade atlas (one per animation frame).
+const ENEMY_ATLAS_COLS: u32 = 6;
+/// Rows in the enemy upgrade atlas (one per upgrade level).
+const ENEMY_ATLAS_ROWS: u32 = 4;
 
 /// Phase 1 — assign each enemy its nearest unclaimed tx (one enemy per tx).
 /// Enemies with a valid existing target keep it; only bots whose tx is gone/immune re-target.
@@ -131,7 +145,7 @@ pub fn update_enemy_hp_bars(
 ) {
     for (enemy, children) in &enemy_q {
         let ratio = (enemy.hp / enemy.max_hp).clamp(0.0, 1.0);
-        let full_w = enemy.sprite_size() * 0.85;
+        let full_w = enemy.sprite_size() * HP_BAR_WIDTH_SCALE;
         for &child in children {
             let Ok((mut sprite, mut t)) = bar_q.get_mut(child) else {
                 continue;
@@ -163,9 +177,9 @@ pub fn setup_enemy_assets(
     mut enemy_assets: ResMut<EnemyAssets>,
 ) {
     enemy_assets.upgrade_layout = Some(layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::splat(96),
-        6,
-        4,
+        UVec2::splat(ENEMY_ATLAS_TILE),
+        ENEMY_ATLAS_COLS,
+        ENEMY_ATLAS_ROWS,
         None,
         None,
     )));
@@ -232,15 +246,15 @@ fn spawn_enemy(
 ) {
     let enemy = Enemy::new_leveled(enemy_type.clone(), level);
     let size = enemy.sprite_size();
-    let bar_w = size * 0.85;
-    let bar_y = -(size * 0.5 + 7.0);
+    let bar_w = size * HP_BAR_WIDTH_SCALE;
+    let bar_y = -(size * 0.5 + HP_BAR_Y_GAP);
     let (Some(layout), Some(image)) = (
         enemy_assets.upgrade_layout.clone(),
         enemy_assets.upgrade_texture(&enemy_type),
     ) else {
         return;
     };
-    let anim_base = level as usize * 6;
+    let anim_base = level as usize * ENEMY_ANIM_FRAMES;
     commands
         .spawn((
             Sprite {
@@ -254,7 +268,7 @@ fn spawn_enemy(
             },
             Transform::from_xyz(pos.x, pos.y, 1.5),
             enemy,
-            AnimationTimer::new_with_offset(3.0, 6, anim_base),
+            AnimationTimer::new_with_offset(ENEMY_ANIM_FPS, ENEMY_ANIM_FRAMES, anim_base),
             Name::new(format!("{enemy_type:?} Lv{}", level + 1)),
         ))
         .with_children(|p| {

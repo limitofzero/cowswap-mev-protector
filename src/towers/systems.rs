@@ -1,4 +1,5 @@
 use bevy::{
+    ecs::query::QueryFilter,
     prelude::*,
     sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d},
 };
@@ -11,6 +12,26 @@ use crate::{
 };
 
 const REMOVE_COST: f32 = 10.0;
+/// Radius (world-space px) used for all tower click / hover hit-tests.
+const TOWER_INTERACT_RADIUS: f32 = 42.0;
+/// Seconds of MEV immunity granted by the CoW Matcher tower.
+const COW_IMMUNITY_SECS: f32 = 6.0;
+/// Seconds of MEV immunity granted by the Dark Pool Node tower.
+const DARKPOOL_IMMUNITY_SECS: f32 = 4.0;
+/// Seconds of slow applied to enemies by the Slippage Guard tower per activation.
+const SLIPPAGE_SLOW_DURATION: f32 = 3.0;
+/// Projectile movement speed in world-space px/s.
+const PROJECTILE_SPEED: f32 = 280.0;
+/// Projectile sprite display size in px.
+const PROJECTILE_SIZE: f32 = 24.0;
+/// Distance at which a projectile counts as hitting its target.
+const PROJECTILE_HIT_RADIUS: f32 = 8.0;
+/// Hit-effect sprite display size in px.
+const HIT_EFFECT_SIZE: f32 = 48.0;
+/// Minimum world-space distance a tower must keep from the mempool path.
+const MIN_PATH_DISTANCE: f32 = 46.0;
+/// Minimum world-space distance between two towers.
+const MIN_TOWER_SPACING: f32 = 40.0;
 
 use super::components::{
     AnimationTimer, DeleteCursor, GhostTower, HitEffect, Projectile, Tower, TowerRangeVisual,
@@ -41,40 +62,40 @@ pub fn tick_towers(
 
         match tower_type {
             TowerType::CoWMatcher => {
-                let in_range: Vec<usize> = tx_query
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, (_, t))| tower_pos.distance(t.translation.truncate()) <= range)
-                    .map(|(i, _)| i)
-                    .collect();
-                if in_range.is_empty() {
-                    continue;
+                let mut granted = 0u32;
+                for (mut tx, tx_t) in tx_query.iter_mut() {
+                    if tower_pos.distance(tx_t.translation.truncate()) <= range {
+                        tx.grant_immunity(COW_IMMUNITY_SECS, ImmunitySource::CoWMatch);
+                        granted += 1;
+                        if granted >= 2 {
+                            break;
+                        }
+                    }
                 }
-                for (mut tx, _) in tx_query.iter_mut().take(2) {
-                    tx.grant_immunity(6.0, ImmunitySource::CoWMatch);
+                if granted == 0 {
+                    continue;
                 }
             }
             TowerType::BatchAuctioneer => {
-                let in_range: Vec<usize> = tx_query
+                let batch_size = tx_query
                     .iter()
-                    .enumerate()
-                    .filter(|(_, (_, t))| tower_pos.distance(t.translation.truncate()) <= range)
-                    .map(|(i, _)| i)
-                    .collect();
-                if in_range.is_empty() {
+                    .filter(|(_, t)| tower_pos.distance(t.translation.truncate()) <= range)
+                    .count() as u32;
+                if batch_size == 0 {
                     continue;
                 }
-                let batch_size = in_range.len() as u32;
-                for (i, (mut tx, _)) in tx_query.iter_mut().enumerate() {
-                    if in_range.contains(&i) {
-                        tx.set_batch(i as u32, batch_size);
+                let mut batch_idx = 0u32;
+                for (mut tx, tx_t) in tx_query.iter_mut() {
+                    if tower_pos.distance(tx_t.translation.truncate()) <= range {
+                        tx.set_batch(batch_idx, batch_size);
+                        batch_idx += 1;
                     }
                 }
             }
             TowerType::DarkPoolNode => {
                 for (mut tx, tx_t) in tx_query.iter_mut() {
                     if tower_pos.distance(tx_t.translation.truncate()) <= range {
-                        tx.grant_immunity(4.0, ImmunitySource::DarkPool);
+                        tx.grant_immunity(DARKPOOL_IMMUNITY_SECS, ImmunitySource::DarkPool);
                     }
                 }
             }
@@ -101,13 +122,13 @@ pub fn tick_towers(
                         Sprite {
                             image: sheet,
                             texture_atlas: Some(TextureAtlas { layout, index: 0 }),
-                            custom_size: Some(Vec2::splat(24.0)),
+                            custom_size: Some(Vec2::splat(PROJECTILE_SIZE)),
                             ..default()
                         },
                         Transform::from_xyz(tower_pos.x, tower_pos.y, 5.0),
                         Projectile {
                             target: target_entity,
-                            speed: 280.0,
+                            speed: PROJECTILE_SPEED,
                             damage: tower.tower_type.solver_damage(tower.upgrade_level),
                         },
                         AnimationTimer::new(12.0, 6),
@@ -118,7 +139,7 @@ pub fn tick_towers(
             TowerType::SlippageGuard => {
                 for (_, mut enemy, enemy_t) in enemy_query.iter_mut() {
                     if tower_pos.distance(enemy_t.translation.truncate()) <= range {
-                        enemy.apply_slow(3.0);
+                        enemy.apply_slow(SLIPPAGE_SLOW_DURATION);
                     }
                 }
             }
@@ -144,7 +165,7 @@ pub fn move_projectiles(
         let proj_pos = proj_t.translation.truncate();
         let dist = proj_pos.distance(target_pos);
 
-        if dist < 8.0 {
+        if dist < PROJECTILE_HIT_RADIUS {
             enemy.hp = (enemy.hp - proj.damage).max(0.0);
             if let (Some(sheet), Some(layout)) = (
                 tower_assets.hit_sheet.clone(),
@@ -154,7 +175,7 @@ pub fn move_projectiles(
                     Sprite {
                         image: sheet,
                         texture_atlas: Some(TextureAtlas { layout, index: 0 }),
-                        custom_size: Some(Vec2::splat(48.0)),
+                        custom_size: Some(Vec2::splat(HIT_EFFECT_SIZE)),
                         ..default()
                     },
                     Transform::from_xyz(proj_t.translation.x, proj_t.translation.y, 5.0),
@@ -314,7 +335,7 @@ pub fn spawn_initial_towers(
                 Name::new(format!("Tower::{}", tower_type.label())),
             ))
             .with_children(|p| {
-                spawn_range_visuals(p, &mut meshes, &mut materials, range, c);
+                spawn_range_visuals(p, &mut meshes, &mut materials, range, c, false);
                 p.spawn((
                     Sprite {
                         image: sheet.clone(),
@@ -342,17 +363,17 @@ fn cursor_world_pos(window: &Window, camera: &Camera, cam_t: &GlobalTransform) -
     camera.viewport_to_world_2d(cam_t, cursor).ok()
 }
 
-fn is_valid_placement<F: bevy::ecs::query::QueryFilter>(
+fn is_valid_placement<F: QueryFilter>(
     pos: Vec2,
     path: &MempoolPath,
     tower_q: &Query<&Transform, F>,
 ) -> bool {
-    if path.is_near_path(pos, 46.0) {
+    if path.is_near_path(pos, MIN_PATH_DISTANCE) {
         return false;
     }
     tower_q
         .iter()
-        .all(|t| t.translation.truncate().distance(pos) >= 40.0)
+        .all(|t| t.translation.truncate().distance(pos) >= MIN_TOWER_SPACING)
 }
 
 /// Spawn/despawn the ghost tower when placement mode changes.
@@ -403,7 +424,7 @@ pub fn manage_ghost_tower(
                     Name::new("GhostTower"),
                 ))
                 .with_children(|p| {
-                    spawn_ghost_range_visuals(p, &mut meshes, &mut materials, range, c);
+                    spawn_range_visuals(p, &mut meshes, &mut materials, range, c, true);
                 });
         }
         PlacementMode::Removing => {
@@ -576,7 +597,7 @@ pub fn handle_placement_click(
             Name::new(format!("Tower::{}", tower_type.label())),
         ))
         .with_children(|p| {
-            spawn_range_visuals(p, &mut meshes, &mut materials, range, c);
+            spawn_range_visuals(p, &mut meshes, &mut materials, range, c, false);
             p.spawn((
                 Sprite {
                     image: sheet.clone(),
@@ -602,54 +623,25 @@ fn spawn_range_visuals(
     materials: &mut Assets<ColorMaterial>,
     range: f32,
     c: bevy::color::Srgba,
+    ghost: bool,
 ) {
-    p.spawn((
-        Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
-        MeshMaterial2d(materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, 0.04),
-            alpha_mode: AlphaMode2d::Blend,
-            ..default()
-        })),
-        Transform::from_xyz(0.0, 0.0, -9.9),
-        Visibility::Hidden,
-        TowerRangeVisual,
-    ));
-    p.spawn((
-        Mesh2d(
-            meshes.add(
-                Annulus::new(range - 0.75, range + 0.75)
-                    .mesh()
-                    .resolution(128),
-            ),
-        ),
-        MeshMaterial2d(materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, 0.55),
-            alpha_mode: AlphaMode2d::Blend,
-            ..default()
-        })),
-        Transform::from_xyz(0.0, 0.0, -9.85),
-        Visibility::Hidden,
-        TowerRangeVisual,
-    ));
-}
+    let fill_alpha = if ghost { 0.07 } else { 0.04 };
+    let ring_alpha = if ghost { 0.70 } else { 0.55 };
 
-fn spawn_ghost_range_visuals(
-    p: &mut bevy::ecs::relationship::RelatedSpawnerCommands<'_, bevy::ecs::hierarchy::ChildOf>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ColorMaterial>,
-    range: f32,
-    c: bevy::color::Srgba,
-) {
-    p.spawn((
+    let mut fill = p.spawn((
         Mesh2d(meshes.add(Circle::new(range).mesh().resolution(128))),
         MeshMaterial2d(materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, 0.07),
+            color: Color::srgba(c.red, c.green, c.blue, fill_alpha),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         })),
         Transform::from_xyz(0.0, 0.0, -9.9),
     ));
-    p.spawn((
+    if !ghost {
+        fill.insert((Visibility::Hidden, TowerRangeVisual));
+    }
+
+    let mut ring = p.spawn((
         Mesh2d(
             meshes.add(
                 Annulus::new(range - 0.75, range + 0.75)
@@ -658,12 +650,15 @@ fn spawn_ghost_range_visuals(
             ),
         ),
         MeshMaterial2d(materials.add(ColorMaterial {
-            color: Color::srgba(c.red, c.green, c.blue, 0.70),
+            color: Color::srgba(c.red, c.green, c.blue, ring_alpha),
             alpha_mode: AlphaMode2d::Blend,
             ..default()
         })),
         Transform::from_xyz(0.0, 0.0, -9.85),
     ));
+    if !ghost {
+        ring.insert((Visibility::Hidden, TowerRangeVisual));
+    }
 }
 
 /// When in Removing mode: left-click a tower to demolish it for REMOVE_COST COW.
@@ -701,13 +696,13 @@ pub fn handle_remove_tower(
     };
 
     for (entity, transform) in &tower_q {
-        if transform.translation.truncate().distance(pos) < 42.0 {
+        if transform.translation.truncate().distance(pos) < TOWER_INTERACT_RADIUS {
             if economy.balance >= REMOVE_COST {
                 economy.balance -= REMOVE_COST;
                 commands.entity(entity).despawn_related::<Children>();
                 commands.entity(entity).despawn();
+                *placement_mode = PlacementMode::Idle;
             }
-            *placement_mode = PlacementMode::Idle;
             return;
         }
     }
@@ -732,7 +727,8 @@ pub fn update_tower_range_visibility(
         });
 
     for (tower_t, children) in &tower_q {
-        let hovered = cursor.is_some_and(|c| c.distance(tower_t.translation.truncate()) < 42.0);
+        let hovered = cursor
+            .is_some_and(|c| c.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
         for &child in children {
             if let Ok(mut vis) = visual_q.get_mut(child) {
                 *vis = if hovered {
@@ -794,7 +790,6 @@ pub fn update_upgrade_preview(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     economy: Res<crate::resources::GameEconomy>,
-    tower_assets: Res<TowerAssets>,
     tower_q: Query<(&Tower, &Transform, &Children)>,
     mut preview_q: UpgradePreviewQ,
 ) {
@@ -809,10 +804,9 @@ pub fn update_upgrade_preview(
                 .and_then(|(cam, cam_t)| cam.viewport_to_world_2d(cam_t, c).ok())
         });
 
-    let _layout = tower_assets.upgrade_layout.clone();
-
     for (tower, tower_t, children) in &tower_q {
-        let hovered = cursor.is_some_and(|c| c.distance(tower_t.translation.truncate()) < 42.0);
+        let hovered = cursor
+            .is_some_and(|c| c.distance(tower_t.translation.truncate()) < TOWER_INTERACT_RADIUS);
         let can_afford = tower.can_upgrade()
             && economy.balance >= tower.tower_type.upgrade_cost(tower.upgrade_level);
 
@@ -869,9 +863,9 @@ pub fn handle_tower_upgrade_click(
     }
 
     for (mut tower, tower_t) in &mut tower_q {
-        if tower_t.translation.truncate().distance(cursor) < 42.0 {
+        if tower_t.translation.truncate().distance(cursor) < TOWER_INTERACT_RADIUS {
             if !tower.can_upgrade() {
-                return;
+                continue;
             }
             let cost = tower.tower_type.upgrade_cost(tower.upgrade_level);
             if economy.balance < cost {

@@ -196,6 +196,8 @@ impl TowerType {
 
 pub const MAX_UPGRADE_LEVEL: u8 = 3;
 pub const SOLVER_BASE_DAMAGE: f32 = 50.0;
+/// Seconds a tower is locked from upgrading after placement or upgrade (prevents misclicks).
+pub const UPGRADE_LOCK_SECS: f32 = 2.5;
 
 /// Tracks the last rendered upgrade level so the sprite sync system only re-runs on change.
 #[derive(Component)]
@@ -256,7 +258,7 @@ impl Tower {
             range,
             upgrade_level: 0,
             cooldown: Timer::from_seconds(secs, TimerMode::Repeating),
-            upgrade_cooldown: 2.5,
+            upgrade_cooldown: UPGRADE_LOCK_SECS,
             tower_type,
         }
     }
@@ -269,7 +271,7 @@ impl Tower {
         self.upgrade_level += 1;
         let new_cd = self.tower_type.cooldown_secs_upgraded(self.upgrade_level);
         self.cooldown = Timer::from_seconds(new_cd, TimerMode::Repeating);
-        self.upgrade_cooldown = 2.5;
+        self.upgrade_cooldown = UPGRADE_LOCK_SECS;
     }
 
     pub fn can_upgrade(&self) -> bool {

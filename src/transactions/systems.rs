@@ -12,6 +12,27 @@ use super::{components::Transaction, resources::TxSpawner};
 
 static TX_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+/// Base progress-per-second for transactions moving along the mempool path.
+const TX_BASE_SPEED: f32 = 0.028;
+/// Random speed variance added on top of TX_BASE_SPEED (uniform [0, range]).
+const TX_SPEED_RANGE: f32 = 0.008;
+/// Sprite display size of a transaction token (width, height) in px.
+const TX_SPRITE_SIZE: Vec2 = Vec2::new(40.0, 48.0);
+/// Sprite display size of the behind-tx FX highlight (width, height) in px.
+const TX_FX_SIZE: Vec2 = Vec2::new(80.0, 88.0);
+/// Font size for the token-amount label rendered above each transaction.
+const TX_LABEL_FONT_SIZE: f32 = 8.0;
+/// Y offset of the amount label above the transaction sprite centre.
+const TX_LABEL_Y: f32 = 32.0;
+/// Number of looping animation frames in the tx sprite sheet (frames 0–3).
+const TX_ANIM_FRAMES: usize = 4;
+/// Atlas frame index: transaction is locked onto by an enemy but not yet drained.
+const TX_FRAME_AT_RISK: usize = 5;
+/// Atlas frame index: transaction is immune (protected by a tower).
+const TX_FRAME_IMMUNE: usize = 6;
+/// Atlas frame index: transaction is actively being drained by an enemy.
+const TX_FRAME_EXTRACTED: usize = 7;
+
 pub fn setup_tx_spawner(
     asset_server: Res<AssetServer>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
@@ -63,12 +84,12 @@ pub fn spawn_transactions(
     };
 
     let (token, texture) = spawner.rand_token();
-    let start_frame = spawner.rand_usize(4);
+    let start_frame = spawner.rand_usize(TX_ANIM_FRAMES);
     let start_progress = spawner.rand_f32() * 0.25;
     let (min_amt, max_amt) = token.amount_range();
     let amount = min_amt + spawner.rand_f32() * (max_amt - min_amt);
     let value_cow = amount * token.cow_rate();
-    let speed = 0.028 + spawner.rand_f32() * 0.008;
+    let speed = TX_BASE_SPEED + spawner.rand_f32() * TX_SPEED_RANGE;
     let pos = path.position_at(start_progress);
     let id = TX_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -83,30 +104,30 @@ pub fn spawn_transactions(
                     layout,
                     index: start_frame,
                 }),
-                custom_size: Some(Vec2::new(40.0, 48.0)),
+                custom_size: Some(TX_SPRITE_SIZE),
                 ..default()
             },
             Transform::from_xyz(pos.x, pos.y, 1.0),
             Transaction::new(value_cow, speed),
             token,
-            AnimationTimer::new(5.0, 4),
+            AnimationTimer::new(5.0, TX_ANIM_FRAMES),
             Name::new(format!("Tx{id}")),
         ))
         .with_children(|parent| {
             parent.spawn((
                 Text2d::new(label),
                 TextFont {
-                    font_size: 8.0,
+                    font_size: TX_LABEL_FONT_SIZE,
                     ..default()
                 },
                 TextColor(label_color),
-                Transform::from_xyz(0.0, 32.0, 0.1),
+                Transform::from_xyz(0.0, TX_LABEL_Y, 0.1),
                 super::components::TxAmountLabel,
             ));
             // Fx effect sprite — sits behind the tx sprite, animated, hidden until an effect is active
             parent.spawn((
                 Sprite {
-                    custom_size: Some(Vec2::new(80.0, 88.0)),
+                    custom_size: Some(TX_FX_SIZE),
                     ..default()
                 },
                 Transform::from_xyz(0.0, 0.0, -0.1),
@@ -221,18 +242,18 @@ pub fn update_tx_sprites(
         };
 
         let status_frame = if targeted.contains(&entity) && tx.value_extracted() > 0.0 {
-            Some(7) // actively being drained
+            Some(TX_FRAME_EXTRACTED)
         } else if tx.is_immune() {
-            Some(6) // protected
+            Some(TX_FRAME_IMMUNE)
         } else if targeted.contains(&entity) {
-            Some(5) // locked on by enemy
+            Some(TX_FRAME_AT_RISK)
         } else {
             None // let the animation loop run normally (0-3)
         };
 
         if let Some(frame) = status_frame {
             atlas.index = frame;
-        } else if atlas.index >= 4 {
+        } else if atlas.index >= TX_ANIM_FRAMES {
             // status cleared — snap back into the animation strip
             atlas.index = 0;
         }
