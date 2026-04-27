@@ -28,7 +28,6 @@ const SHOP_TOWERS: [TowerType; 5] = [
     TowerType::SlippageGuard,
     TowerType::DarkPoolNode,
 ];
-const REMOVE_COST: f32 = 10.0;
 // Total buttons = 5 tower + 1 remove; used to center the row.
 const TOTAL_BTN_COUNT: usize = SHOP_TOWERS.len() + 1;
 
@@ -371,12 +370,12 @@ fn setup_world_ui(
             Transform::from_xyz(0.0, 10.0, 1.0),
         ));
         p.spawn((
-            Text2d::new(format!("-{:.0} CoW", REMOVE_COST)),
+            Text2d::new("+50% CoW"),
             TextFont {
                 font_size: 11.0,
                 ..default()
             },
-            TextColor(Color::srgb(0.70, 0.70, 0.70)),
+            TextColor(Color::srgb(0.3, 1.0, 0.5)),
             Transform::from_xyz(0.0, -10.0, 1.0),
         ));
     });
@@ -681,6 +680,7 @@ fn update_tooltip(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     economy: Res<GameEconomy>,
+    placement_mode: Res<PlacementMode>,
     tower_q: Query<(&Tower, &Transform), (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
     btn_q: Query<(&ShopBtn, &Transform), (Without<TowerTooltipPanel>, Without<ShopTooltipPanel>)>,
     mut tower_panel_q: Query<
@@ -775,49 +775,63 @@ fn update_tooltip(
         let mut rows: [(String, Color, bool); 7] =
             std::array::from_fn(|_| (String::new(), Color::WHITE, true));
         rows[0] = (format!("{}  Lv {}", tt.label(), lvl), col_hi, true);
-        rows[1] = (tower_stat_text(&tt, lvl), col_stat, true);
-        rows[2] = ("-- UPGRADES --".into(), col_muted, true);
-        for row in 0..3u8 {
-            let lv = row + 1;
-            let effect = tt.upgrade_effect_desc(lv);
-            let (text, color) = if lv <= lvl {
-                (format!("[+] Lv{}  {}", lv, effect), col_done)
-            } else {
-                let cost = tt.upgrade_cost(row);
-                (
-                    format!("[ ] Lv{}  {}  {:.0} CoW", lv, effect, cost),
-                    col_locked,
-                )
-            };
-            rows[3 + row as usize] = (text, color, true);
-        }
-        // Upgrade action line
-        rows[6] = if lvl < crate::towers::MAX_UPGRADE_LEVEL {
-            if upg_cd > 0.0 {
-                (
-                    format!("Can be upgraded in {:.1}s", upg_cd),
-                    col_muted,
-                    true,
-                )
-            } else {
-                let cost = tt.upgrade_cost(lvl);
-                if economy.balance >= cost {
+
+        if *placement_mode == PlacementMode::Removing {
+            let refund = tt.sell_value();
+            rows[1] = (String::new(), col_stat, false);
+            rows[2] = (String::new(), col_stat, false);
+            rows[3] = (String::new(), col_stat, false);
+            rows[4] = (String::new(), col_stat, false);
+            rows[5] = (String::new(), col_stat, false);
+            rows[6] = (
+                format!("Remove and get {:.0} CoW", refund),
+                Color::srgb(0.3, 1.0, 0.5),
+                true,
+            );
+        } else {
+            rows[1] = (tower_stat_text(&tt, lvl), col_stat, true);
+            rows[2] = ("-- UPGRADES --".into(), col_muted, true);
+            for row in 0..3u8 {
+                let lv = row + 1;
+                let effect = tt.upgrade_effect_desc(lv);
+                let (text, color) = if lv <= lvl {
+                    (format!("[+] Lv{}  {}", lv, effect), col_done)
+                } else {
+                    let cost = tt.upgrade_cost(row);
                     (
-                        format!("Upgrade to Lv{}  {:.0} CoW", lvl + 1, cost),
-                        Color::srgb(0.45, 1.00, 0.55),
+                        format!("[ ] Lv{}  {}  {:.0} CoW", lv, effect, cost),
+                        col_locked,
+                    )
+                };
+                rows[3 + row as usize] = (text, color, true);
+            }
+            rows[6] = if lvl < crate::towers::MAX_UPGRADE_LEVEL {
+                if upg_cd > 0.0 {
+                    (
+                        format!("Can be upgraded in {:.1}s", upg_cd),
+                        col_muted,
                         true,
                     )
                 } else {
-                    (
-                        format!("Need {:.0} CoW to upgrade", cost),
-                        Color::srgb(1.00, 0.40, 0.40),
-                        true,
-                    )
+                    let cost = tt.upgrade_cost(lvl);
+                    if economy.balance >= cost {
+                        (
+                            format!("Upgrade to Lv{}  {:.0} CoW", lvl + 1, cost),
+                            Color::srgb(0.45, 1.00, 0.55),
+                            true,
+                        )
+                    } else {
+                        (
+                            format!("Need {:.0} CoW to upgrade", cost),
+                            Color::srgb(1.00, 0.40, 0.40),
+                            true,
+                        )
+                    }
                 }
-            }
-        } else {
-            ("[ MAX LEVEL ]".into(), col_muted, true)
-        };
+            } else {
+                ("[ MAX LEVEL ]".into(), col_muted, true)
+            };
+        }
 
         let tooltip_offset_y = 55.0 + 8.0 + TOOLTIP_H * 0.5;
         let tx = pos.x.clamp(

@@ -16,7 +16,6 @@ use super::super::components::{
 use super::super::resources::TowerAssets;
 use super::TOWER_INTERACT_RADIUS;
 
-const REMOVE_COST: f32 = 10.0;
 const MIN_PATH_DISTANCE: f32 = 46.0;
 const MIN_TOWER_SPACING: f32 = 40.0;
 
@@ -340,7 +339,7 @@ pub fn handle_remove_tower(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut placement_mode: ResMut<PlacementMode>,
-    tower_q: Query<(Entity, &Transform), With<Tower>>,
+    tower_q: Query<(Entity, &Tower, &Transform)>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut economy: ResMut<GameEconomy>,
@@ -366,14 +365,12 @@ pub fn handle_remove_tower(
         return;
     };
 
-    for (entity, transform) in &tower_q {
+    for (entity, tower, transform) in &tower_q {
         if transform.translation.truncate().distance(pos) < TOWER_INTERACT_RADIUS {
-            if economy.balance >= REMOVE_COST {
-                economy.balance -= REMOVE_COST;
-                commands.entity(entity).despawn_related::<Children>();
-                commands.entity(entity).despawn();
-                *placement_mode = PlacementMode::Idle;
-            }
+            economy.balance += tower.tower_type.sell_value();
+            commands.entity(entity).despawn_related::<Children>();
+            commands.entity(entity).despawn();
+            *placement_mode = PlacementMode::Idle;
             return;
         }
     }

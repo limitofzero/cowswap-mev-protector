@@ -140,6 +140,11 @@ impl TowerType {
         )
     }
 
+    /// COW refunded when selling this tower (50 % of base cost).
+    pub fn sell_value(&self) -> f32 {
+        self.cost() * 0.5
+    }
+
     /// Cost to upgrade from `current_level` to `current_level + 1`.
     /// Formula: base_cost * 0.5 * 1.5^current_level
     pub fn upgrade_cost(&self, current_level: u8) -> f32 {
@@ -210,6 +215,7 @@ pub struct UpgradePreview;
 /// Marks the range fill/border children — hidden unless the tower is hovered.
 #[derive(Component)]
 pub struct TowerRangeVisual;
+
 
 /// Marks the semi-transparent ghost tower that follows the cursor during placement.
 #[derive(Component)]
