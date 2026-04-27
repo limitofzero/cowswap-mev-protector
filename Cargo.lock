@@ -1748,6 +1748,7 @@ dependencies = [
  "bevy",
  "getrandom 0.4.2",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

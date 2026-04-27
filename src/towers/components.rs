@@ -216,7 +216,6 @@ pub struct UpgradePreview;
 #[derive(Component)]
 pub struct TowerRangeVisual;
 
-
 /// Marks the semi-transparent ghost tower that follows the cursor during placement.
 #[derive(Component)]
 pub struct GhostTower(pub TowerType);

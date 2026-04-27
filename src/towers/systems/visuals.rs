@@ -198,4 +198,3 @@ pub fn handle_tower_upgrade_click(
         }
     }
 }
-

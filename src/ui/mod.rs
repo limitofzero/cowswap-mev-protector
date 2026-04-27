@@ -1,6 +1,8 @@
 use crate::utils::make_rounded_rect;
 use bevy::prelude::*;
 use bevy::sprite_render::{AlphaMode2d, ColorMaterial, MeshMaterial2d};
+#[cfg(target_arch = "wasm32")]
+use web_sys;
 
 use crate::{
     enemies::resources::WaveManager,
@@ -97,6 +99,7 @@ impl Plugin for UiPlugin {
                     update_tooltip,
                     update_stat_tooltips,
                     animate_btn_click,
+                    update_cursor_style,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
@@ -1088,6 +1091,61 @@ fn update_stat_tooltips(
         let (t, c) = &lines[line.1 as usize];
         text.0 = t.clone();
         color.0 = *c;
+    }
+}
+
+/// Change the browser cursor to a pointer when hovering clickable world elements
+/// (shop buttons, placed towers), and restore it to default otherwise.
+/// No-op on non-wasm targets.
+#[allow(unused_variables)]
+fn update_cursor_style(
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    btn_q: Query<&Transform, With<ShopBtn>>,
+    remove_btn_q: Query<&Transform, With<RemoveBtn>>,
+    tower_q: Query<&Transform, With<Tower>>,
+    placement_mode: Res<PlacementMode>,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let Ok(win) = windows.single() else { return };
+        let Ok((cam, cam_t)) = camera_q.single() else {
+            return;
+        };
+
+        let pointer = win
+            .cursor_position()
+            .and_then(|screen_pos| cam.viewport_to_world_2d(cam_t, screen_pos).ok())
+            .map(|cursor| {
+                let half_h = win.height() * 0.5;
+                let bot_y = -half_h + BOT_BAR_H * 0.5;
+
+                let over_btn = btn_q.iter().any(|transform| {
+                    (cursor.x - transform.translation.x).abs() <= BTN_W * 0.5
+                        && (cursor.y - bot_y).abs() <= BOT_BAR_H * 0.5 + 4.0
+                });
+                let over_remove = remove_btn_q.single().is_ok_and(|transform| {
+                    (cursor.x - transform.translation.x).abs() <= BTN_W * 0.5
+                        && (cursor.y - bot_y).abs() <= BOT_BAR_H * 0.5 + 4.0
+                });
+                let over_tower = matches!(
+                    *placement_mode,
+                    PlacementMode::Idle | PlacementMode::Removing
+                ) && tower_q
+                    .iter()
+                    .any(|transform| transform.translation.truncate().distance(cursor) < 42.0);
+
+                over_btn || over_remove || over_tower
+            })
+            .unwrap_or(false);
+
+        let cursor_value = if pointer { "pointer" } else { "default" };
+        if let Some(body) = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.body())
+        {
+            let _ = body.style().set_property("cursor", cursor_value);
+        }
     }
 }
 
